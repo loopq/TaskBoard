@@ -2,15 +2,22 @@
 import type Sortable from 'sortablejs';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { sortable } from '../sortable';
-import { addTask, byColumn, type Column, deleteColumn, moveTask, renameColumn } from '../store';
+import { addTask, byColumn, type Column, columns, deleteColumn, moveColumn, moveTask, renameColumn } from '../store';
 import AddInput from './AddInput.vue';
 import Icon from './Icon.vue';
 import TaskCard from './TaskCard.vue';
 
-const props = defineProps<{ col: Column }>();
+const props = defineProps<{ col: Column; mobile: boolean }>();
 const tasks = computed(() => byColumn.value[props.col.id] ?? []);
 const locked = computed(() => props.col.kind !== 'normal');
 const isDone = computed(() => props.col.kind === 'done');
+const normals = computed(() => columns.value.filter((c) => c.kind === 'normal'));
+const columnIndex = computed(() => normals.value.findIndex((c) => c.id === props.col.id));
+
+function shiftColumn(offset: number) {
+  toggleMenu(false);
+  moveColumn(props.col.id, columnIndex.value + offset);
+}
 
 // 「已完成」：pull/put 都关掉 → 拖不进也拖不出，只能组内排序（进出走完成/取消完成）
 const listEl = ref<HTMLElement>();
@@ -62,9 +69,13 @@ function remove() {
 
 // ---- 添加任务：新卡片排在列尾，滚过去让它可见 ----
 async function submitTask(t: string) {
-  await addTask(props.col.id, t);
+  const task = await addTask(props.col.id, t);
+  if (!task) return false;
   await nextTick();
-  listEl.value?.lastElementChild?.scrollIntoView({ block: 'nearest' });
+  // 切到其他分组后请求才返回时，不滚动隐藏列表或把整个看板带偏。
+  const card = listEl.value?.querySelector<HTMLElement>(`[data-id="${task.id}"]`);
+  if (card?.getClientRects().length) card.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  return true;
 }
 </script>
 
@@ -90,6 +101,10 @@ async function submitTask(t: string) {
         </button>
         <div v-if="menuOpen" class="menu-pop" role="menu">
           <button role="menuitem" @click="startRename">改名</button>
+          <template v-if="mobile">
+            <button role="menuitem" :disabled="columnIndex === 0" @click="shiftColumn(-1)">上移</button>
+            <button role="menuitem" :disabled="columnIndex === normals.length - 1" @click="shiftColumn(1)">下移</button>
+          </template>
           <button role="menuitem" class="danger" :disabled="tasks.length > 0" :title="tasks.length ? '列里还有任务，先移走才能删除' : ''" @click="remove">
             删除{{ tasks.length ? '（列里有任务）' : '' }}
           </button>
@@ -97,13 +112,13 @@ async function submitTask(t: string) {
       </div>
     </header>
 
+    <footer v-if="!isDone" class="col-foot">
+      <AddInput placeholder="新建任务" :maxlength="200" :add="submitTask" />
+    </footer>
+
     <div ref="listEl" class="cards" :data-col="col.id">
       <TaskCard v-for="t in tasks" :key="t.id" :task="t" />
     </div>
-
-    <footer v-if="!isDone" class="col-foot">
-      <AddInput placeholder="新建任务" :maxlength="200" @add="submitTask" />
-    </footer>
-    <p v-else-if="!tasks.length" class="col-hint">点任务的 ○ 或「完成任务」放到这里</p>
+    <p v-if="isDone && !tasks.length" class="col-hint">点任务的 ○ 或「完成任务」放到这里</p>
   </section>
 </template>

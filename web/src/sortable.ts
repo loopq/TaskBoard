@@ -1,8 +1,5 @@
 import Sortable, { type SortableEvent } from 'sortablejs';
-import { ref } from 'vue';
 
-/** 拖动中：看板据此关掉 scroll-snap，否则自动滚动会和吸附打架 */
-export const dragging = ref(false);
 let lastDrop = 0;
 /** 拖完松手时浏览器可能补发一次 click，卡片据此忽略，不误开详情 */
 export const justDropped = () => Date.now() - lastDrop < 250;
@@ -15,16 +12,14 @@ export function sortable(el: HTMLElement, opts: Sortable.Options & { onDrop: (e:
   let next: Node | null = null;
   return Sortable.create(el, {
     animation: 160,
-    delay: 200, // 触屏长按 200ms 才开始拖，避免和横向滑动冲突
+    delay: 200, // 触屏长按后才开始拖，保留正常滑动浏览任务的手势
     delayOnTouchOnly: true,
     touchStartThreshold: 8,
     ...opts,
     onStart(e) {
       next = e.item.nextSibling;
-      dragging.value = true;
     },
     onEnd(e) {
-      dragging.value = false;
       lastDrop = Date.now();
       e.from.insertBefore(e.item, next);
       if (e.from !== e.to || e.oldIndex !== e.newIndex) opts.onDrop(e);

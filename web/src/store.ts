@@ -133,7 +133,11 @@ setUnauthorizedHandler(() => {
 // ---- 列 ----
 
 export const addColumn = (name: string) =>
-  run(async () => state.columns.push(await api<Column>('POST', '/columns', { name })));
+  run(async () => {
+    const col = await api<Column>('POST', '/columns', { name });
+    state.columns.push(col);
+    return col;
+  });
 
 export const renameColumn = (id: string, name: string) =>
   run(async () => {
@@ -163,7 +167,11 @@ export function moveColumn(id: string, index: number) {
 // ---- 任务 ----
 
 export const addTask = (column_id: string, title: string) =>
-  run(async () => upsert(await api<Card>('POST', '/tasks', { column_id, title })));
+  run(async () => {
+    const task = await api<Card>('POST', '/tasks', { column_id, title });
+    upsert(task);
+    return task;
+  });
 
 /** index：目标列里（不含自己）的目标位置，超出长度即排到最后 */
 export function moveTask(id: string, columnId: string, index: number) {

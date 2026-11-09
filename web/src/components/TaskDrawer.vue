@@ -177,10 +177,18 @@ function syncCounts() {
 const base = () => `/tasks/${loadedId.value}`;
 
 async function addSub(t: string) {
-  if (!loadedId.value) return;
-  const s = await run(() => api<Subtask>('POST', `${base()}/subtasks`, { title: t }));
-  if (s) subtasks.value.push(s);
-  syncCounts();
+  const id = loadedId.value;
+  if (!id) return false;
+  const s = await run(() => api<Subtask>('POST', `/tasks/${id}/subtasks`, { title: t }));
+  if (!s) return false;
+  if (loadedId.value === id) {
+    subtasks.value.push(s);
+    syncCounts();
+  } else {
+    const task = findTask(id);
+    if (task) task.sub_total++;
+  }
+  return true;
 }
 async function toggleSub(s: Subtask) {
   s.done = s.done ? 0 : 1;
@@ -322,7 +330,7 @@ async function removeComment(c: Entry) {
                     <button class="icon-btn sub-del" aria-label="删除子任务" @click="removeSub(s)"><Icon name="close" :size="14" /></button>
                   </li>
                 </ul>
-                <AddInput placeholder="添加子任务" :maxlength="200" @add="addSub" />
+                <AddInput :key="loadedId!" placeholder="添加子任务" :maxlength="200" :add="addSub" />
               </div>
             </div>
           </div>
