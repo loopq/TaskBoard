@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#f3eee4"/>
+  <g transform="rotate(-7 256 256)">
+    <rect x="121" y="121" width="270" height="270" rx="34" fill="#c23a22"/>
+    <rect x="139" y="139" width="234" height="234" rx="20" fill="none" stroke="#f3eee4" stroke-width="6" opacity=".85"/>
+    <text x="256" y="262" text-anchor="middle" dominant-baseline="central" font-family="Songti SC, STSong, serif" font-weight="900" font-size="172" fill="#f3eee4">完</text>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!.dockerignore
+!api/
+!api/package.json
+!api/schema.sql
+!api/src/
+!api/src/**
+!web/
+!web/dist/
+!web/dist/**

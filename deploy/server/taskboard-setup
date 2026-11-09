@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $EUID == 0 ]] || exit 1
+case "${1:-}" in --prepare|--activate-dns-confirmed) ;; *) exit 1 ;; esac
+cd "$(dirname "$0")/../.."
+exec 8>/run/lock/taskboard-deploy.lock
+flock -w 120 8
+install -d -m 0755 /usr/local/libexec
+install -m 0700 deploy/server/taskboard-backup deploy/server/taskboard-set-password /usr/local/libexec/
+install -m 0644 deploy/systemd/taskboard-backup.service deploy/systemd/taskboard-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now taskboard-backup.timer
+if [[ $1 == --prepare ]]; then
+  echo '运维脚本与备份定时器已安装。尚未修改 Caddy；请确认阿里云 task A 记录生效后再 activate。'
+  exit 0
+fi
+
+# 用户已确认 DNS 后再做独立核对；不依赖本机 Clash 的 DNS 结果。
+python3 - <<'PY'
+import socket
+def addresses(host):
+    return {r[4][0] for r in socket.getaddrinfo(host, 443, family=socket.AF_INET)}
+task, account = addresses('task.loopq.cn'), addresses('account.loopq.cn')
+assert task and task == account, f'DNS mismatch: task={task}, account={account}'
+print('DNS_A_MATCH', ', '.join(sorted(task)))
+PY
+proxy=/opt/apps/reverse-proxy
+container=shared-proxy-caddy-1
+stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+cp -p "$proxy/Caddyfile" "$proxy/Caddyfile.taskboard-$stamp.bak"
+cp -p "$proxy/compose.yaml" "$proxy/compose.yaml.taskboard-$stamp.bak"
+reloaded=false
+rollback() {
+  # 保留绑定挂载的 inode；rename 会让运行中的 Caddy 仍然读取旧文件。
+  cat "$proxy/Caddyfile.taskboard-$stamp.bak" >"$proxy/Caddyfile"
+  cat "$proxy/compose.yaml.taskboard-$stamp.bak" >"$proxy/compose.yaml"
+  if [[ $reloaded == true ]]; then
+    docker exec "$container" caddy validate --config /etc/caddy/Caddyfile &&
+      docker exec "$container" caddy reload --config /etc/caddy/Caddyfile
+  fi
+}
+trap 'rollback' ERR
+
+# 基于已核实的共享代理结构作增量修改；结构不符合预期就中止，不重写已有站点。
+python3 - "$proxy" <<'PY'
+import pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+compose = root / 'compose.yaml'
+text = compose.read_text()
+if 'taskboard-private' not in text:
+    pattern = r'(?m)^(    networks: \[)([^\]\n]+)(\])$'
+    matches = list(re.finditer(pattern, text))
+    assert len(matches) == 1 and text.count('\nnetworks:\n') == 1, 'Unexpected proxy compose structure'
+    text = re.sub(pattern, lambda m: m[1] + m[2] + ', taskboard' + m[3], text)
+    text += '  taskboard:\n    name: taskboard-private\n    external: true\n'
+    compose.write_text(text)
+else:
+    assert re.search(r'(?m)^    networks: \[[^\]\n]*\btaskboard\b', text), 'Taskboard network is not attached'
+caddy = root / 'Caddyfile'
+text = caddy.read_text()
+if not re.search(r'(?m)^task\.loopq\.cn\s*\{', text):
+    with caddy.open('a') as dest:
+        dest.write('\ntask.loopq.cn {\n    encode zstd gzip\n    header Strict-Transport-Security "max-age=31536000"\n    request_body {\n        max_size 6MB\n    }\n    reverse_proxy taskboard-app:3000\n}\n')
+PY
+if ! docker compose -f "$proxy/compose.yaml" config --quiet; then
+  rollback
+  exit 1
+fi
+if ! docker inspect "$container" --format '{{json .NetworkSettings.Networks}}' | \
+  python3 -c 'import json,sys; sys.exit(0 if "taskboard-private" in json.load(sys.stdin) else 1)'; then
+  docker network connect taskboard-private "$container"
+fi
+if ! docker exec "$container" caddy validate --config /etc/caddy/Caddyfile; then
+  rollback
+  exit 1
+fi
+reloaded=true
+if ! docker exec "$container" caddy reload --config /etc/caddy/Caddyfile; then
+  rollback
+  exit 1
+fi
+for site in account.loopq.cn agy.loopq.cn; do
+  code=$(curl --max-time 20 --retry 2 --resolve "$site:443:127.0.0.1" -sS -o /dev/null -w '%{http_code}' "https://$site/")
+  [[ $code == 200 ]] || { echo "$site returned $code" >&2; rollback; exit 1; }
+  printf '%s HTTP %s\n' "$site" "$code"
+done
+trap - ERR
+echo 'Caddy validated and reloaded; existing sites verified'

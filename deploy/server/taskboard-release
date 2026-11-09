@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# 由本机经 stdin 发送；只在管理员通道执行。连接重试由锁和 current-release 保证幂等。
+set -euo pipefail
+umask 077
+release=${1:?release required}
+archive_sha=${2:?archive sha256 required}
+[[ $EUID == 0 && $release =~ ^[a-f0-9]{20}$ && $archive_sha =~ ^[a-f0-9]{64}$ ]] || exit 1
+exec 8>/run/lock/taskboard-deploy.lock
+flock -w 240 8
+cd "/opt/taskboard/releases/$release"
+archive=source.tar.gz
+[[ ! -f source.tar.gz.upload ]] || archive=source.tar.gz.upload
+printf '%s  %s\n' "$archive_sha" "$archive" | sha256sum --check
+if [[ -f /etc/taskboard/current-release && $(cat /etc/taskboard/current-release) == "$release" ]]; then
+  echo "Release already active: $release"
+  exit 0
+fi
+[[ $archive == source.tar.gz ]] || mv "$archive" source.tar.gz
+mkdir -p source
+python3 - "$release" <<'PY'
+import hashlib, json, pathlib, sys, tarfile
+root = pathlib.Path('source')
+with tarfile.open('source.tar.gz') as archive:
+    members = archive.getmembers()
+    names = [m.name for m in members]
+    assert len(names) == len(set(names)), 'Duplicate archive paths'
+    for member in members:
+        path = pathlib.PurePosixPath(member.name)
+        assert member.isfile() and not path.is_absolute() and '..' not in path.parts, member.name
+    metadata = archive.extractfile('release-manifest.json').read()
+    assert hashlib.sha256(metadata).hexdigest()[:20] == sys.argv[1], 'Release hash mismatch'
+    manifest = json.loads(metadata)
+    assert set(names) == set(manifest['files']) | {'release-manifest.json'}, 'Unlisted archive files'
+    for name, digest in manifest['files'].items():
+        assert hashlib.sha256(archive.extractfile(name).read()).hexdigest() == digest, name
+    archive.extractall(root, filter='data')
+# tar 只列文件，父目录受 root 的 umask 077 影响；镜像里的 uid 1000 必须能遍历静态目录。
+for path in root.rglob('*'):
+    if path.is_dir():
+        path.chmod(0o755)
+print('RELEASE_MANIFEST_VERIFIED', manifest['git_base'])
+PY
+cd source
+docker build --platform linux/amd64 -t "taskboard:$release" . 2>&1 | tee ../build.log
+docker image inspect "taskboard:$release" --format '{{.Id}} {{.Architecture}}' | tee ../image.txt
+
+# 测试只使用随机测试密钥和独立目录，永远不读取生产 secrets.env。
+test_root=$(mktemp -d /var/tmp/taskboard-test.XXXXXX)
+test_container="taskboard-test-$release-$$"
+cleanup() {
+  docker rm -f "$test_container" >/dev/null 2>&1 || true
+  rm -rf -- "$test_root"
+}
+trap cleanup EXIT
+install -d -m 0700 -o 1000 -g 1000 "$test_root/data"
+for key in TOKEN_SECRET PW_ZHUHU PW_LVCUI; do
+  printf '%s=%s\n' "$key" "$(openssl rand -hex 32)"
+done >"$test_root/test.env"
+docker run -d --name "$test_container" --init --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --memory 256m --pids-limit 100 \
+  --tmpfs /tmp:size=16m,mode=1777 --log-opt max-size=10m --log-opt max-file=3 \
+  --env-file "$test_root/test.env" \
+  -v "$test_root/data:/data" -p 127.0.0.1:18080:3000 "taskboard:$release" >/dev/null
+for attempt in {1..45}; do
+  health=$(docker inspect "$test_container" --format '{{.State.Health.Status}}')
+  [[ $health != healthy ]] || break
+  [[ $health != unhealthy ]] || { docker logs "$test_container"; exit 1; }
+  sleep 2
+done
+[[ $health == healthy ]] || { echo 'Test container health timed out' >&2; exit 1; }
+curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/ -o /dev/null
+BASE=http://127.0.0.1:18080 ENV_FILE="$test_root/test.env" SQL_CONTAINER="$test_container" \
+  bash api/test/rules.sh 2>&1 | tee ../rules.log
+cleanup
+trap - EXIT
+echo 'ISOLATED_IMAGE_TEST_PASSED'
+
+install -d -m 0700 -o 1000 -g 1000 /var/lib/taskboard
+if ! docker network inspect taskboard-private >/dev/null 2>&1; then
+  docker network create --internal taskboard-private >/dev/null
+fi
+[[ $(docker network inspect taskboard-private --format '{{.Internal}}') == true ]] || {
+  echo 'taskboard-private must be internal' >&2; exit 1;
+}
+if [[ ! -e /etc/taskboard/secrets.env ]]; then
+  secrets_temp=$(mktemp /etc/taskboard/.secrets.XXXXXX)
+  { printf "TOKEN_SECRET='%s'\n" "$(openssl rand -base64 48)"; printf "PW_ZHUHU=''\nPW_LVCUI=''\n"; } >"$secrets_temp"
+  chmod 0600 "$secrets_temp"
+  mv "$secrets_temp" /etc/taskboard/secrets.env
+fi
+# 同一版本重试不覆盖首次快照，避免将半完成的切换误当作上一版。
+if [[ ! -f ../rollback-ready ]]; then
+  if [[ -f /etc/taskboard/release.env ]]; then
+    if [[ -s /var/lib/taskboard/taskboard.db ]]; then
+      bash deploy/server/taskboard-backup predeploy
+    fi
+    cp -p /etc/taskboard/release.env ../previous.env
+    cp -p /etc/taskboard/compose.yaml ../previous.compose.yaml
+  fi
+  touch ../rollback-ready
+fi
+install -m 0600 deploy/compose.yaml /etc/taskboard/compose.yaml
+printf 'APP_IMAGE=taskboard:%s\n' "$release" >/etc/taskboard/release.env
+chmod 0600 /etc/taskboard/release.env
+compose=(docker compose --env-file /etc/taskboard/release.env -f /etc/taskboard/compose.yaml)
+if ! ("${compose[@]}" config --quiet && "${compose[@]}" up -d --wait --wait-timeout 90); then
+  if [[ -f ../previous.env ]]; then
+    install -m 0600 ../previous.env /etc/taskboard/release.env
+    install -m 0600 ../previous.compose.yaml /etc/taskboard/compose.yaml
+    "${compose[@]}" up -d --wait --wait-timeout 90
+    echo 'Previous release restored' >&2
+  else
+    "${compose[@]}" stop || true
+  fi
+  exit 1
+fi
+printf '%s\n' "$release" >/etc/taskboard/current-release.new
+mv /etc/taskboard/current-release.new /etc/taskboard/current-release
+printf 'DEPLOYED_RELEASE=%s\n' "$release"

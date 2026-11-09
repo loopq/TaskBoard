@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $EUID == 0 ]] || { echo '需要 root' >&2; exit 1; }
+kind=${1:-daily}
+case "$kind" in daily) keep=14 ;; predeploy) keep=10 ;; *) echo '用法：taskboard-backup [daily|predeploy]' >&2; exit 1 ;; esac
+exec 9>/run/lock/taskboard-backup.lock
+flock -n 9 || { echo 'Backup already running' >&2; exit 1; }
+[[ -s /var/lib/taskboard/taskboard.db ]] || { echo 'Database missing' >&2; exit 1; }
+install -d -m 0700 /opt/backups/taskboard
+stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+temp="/var/lib/taskboard/.backup-$stamp.db"
+trap 'rm -f -- "$temp" "$temp-wal" "$temp-shm"' EXIT
+docker compose --env-file /etc/taskboard/release.env -f /etc/taskboard/compose.yaml \
+  exec -T app node api/src/backup.ts /data/taskboard.db "/data/.backup-$stamp.db" </dev/null
+backup="/opt/backups/taskboard/$kind-$stamp.db"
+mv -- "$temp" "$backup"
+chown root:root "$backup"
+chmod 0600 "$backup"
+python3 - "$kind" "$keep" <<'PY'
+import pathlib, sys
+files = sorted(pathlib.Path('/opt/backups/taskboard').glob(f'{sys.argv[1]}-*.db'), reverse=True)
+for path in files[int(sys.argv[2]):]:
+    path.unlink()
+PY
+printf 'Backup verified: %s\n' "$backup"

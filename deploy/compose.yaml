@@ -1,0 +1,27 @@
+name: taskboard
+services:
+  app:
+    image: ${APP_IMAGE:?Set immutable release image tag}
+    platform: linux/amd64
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 100
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    env_file: [/etc/taskboard/secrets.env]
+    volumes:
+      - /var/lib/taskboard:/data
+    networks:
+      private:
+        aliases: [taskboard-app]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+networks:
+  private:
+    name: taskboard-private
+    external: true

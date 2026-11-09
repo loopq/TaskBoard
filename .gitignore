@@ -1,0 +1,17 @@
+# deps / build
+node_modules/
+dist/
+
+# 本地数据、发布产物与密钥
+api/data/
+artifacts/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.log
