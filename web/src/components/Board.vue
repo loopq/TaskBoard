@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type Sortable from 'sortablejs';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { today } from '../format';
 import { dragging, sortable } from '../sortable';
 import { addColumn, columns, logout, moveColumn, state } from '../store';
+import AddInput from './AddInput.vue';
 import BoardColumn from './BoardColumn.vue';
 import Icon from './Icon.vue';
 import TaskDrawer from './TaskDrawer.vue';
@@ -29,21 +30,6 @@ watch(normalsEl, (el) => {
       })
     : undefined;
 });
-
-const adding = ref(false);
-const newName = ref('');
-const nameInput = ref<HTMLInputElement>();
-async function startAdd() {
-  adding.value = true;
-  await nextTick();
-  nameInput.value?.focus();
-}
-async function submitColumn() {
-  const name = newName.value.trim();
-  if (!name) return (adding.value = false);
-  newName.value = '';
-  await addColumn(name);
-}
 </script>
 
 <template>
@@ -54,6 +40,7 @@ async function submitColumn() {
         <span class="mono topbar-date">{{ today() }}</span>
       </div>
       <div class="me">
+        <span class="avatar" aria-hidden="true">{{ state.user?.[0]?.toUpperCase() }}</span>
         <span class="me-name">{{ state.user }}</span>
         <button class="btn ghost small" @click="logout"><Icon name="logout" :size="14" />退出</button>
       </div>
@@ -68,18 +55,7 @@ async function submitColumn() {
         <BoardColumn :col="done" />
 
         <div class="col col-add">
-          <form v-if="adding" class="col-add-form" @submit.prevent="submitColumn">
-            <input
-              ref="nameInput"
-              v-model="newName"
-              class="field"
-              maxlength="50"
-              placeholder="列名称，回车创建"
-              @blur="!newName.trim() && (adding = false)"
-              @keydown.esc="adding = false"
-            />
-          </form>
-          <button v-else class="col-add-btn" @click="startAdd"><Icon name="plus" />新建列</button>
+          <AddInput placeholder="新建列" :maxlength="50" @add="addColumn" />
         </div>
       </template>
       <p v-else class="board-loading mono">载入中…</p>

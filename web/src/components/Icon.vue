@@ -13,6 +13,16 @@ const PATHS = {
   lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
   send: 'M4 12l16-8-6 16-2.5-6.5z',
+  link: 'M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1',
+  columns: 'M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v6h-4z',
+  desc: 'M4 6h16M4 12h16M4 18h10',
+  today: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 15h.01',
+  tomorrow: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M10.5 13l2.5 2-2.5 2',
+  chevronLeft: 'M15 5l-7 7 7 7',
+  chevronRight: 'M9 5l7 7-7 7',
+  rotateLeft: 'M3 4v6h6M3.5 15a8.5 8.5 0 1 0 2-8.8L3 10',
+  rotateRight: 'M21 4v6h-6M20.5 15a8.5 8.5 0 1 1-2-8.8L21 10',
+  external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
 } as const;
 defineProps<{ name: keyof typeof PATHS; size?: number }>();
 </script>

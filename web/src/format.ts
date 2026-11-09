@@ -30,6 +30,14 @@ export function toDateInput(ms: number | null) {
 }
 export const fromDateInput = (s: string) => (s ? new Date(`${s}T00:00:00`).getTime() : null);
 
+/** 今天 + n 天的本地零点（截止日期快捷：今天 / 明天） */
+export function dayFromToday(n: number) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return d.getTime();
+}
+
 export const today = () => {
   const d = new Date();
   return `${d.getFullYear()} · ${pad(d.getMonth() + 1)} · ${pad(d.getDate())}`;

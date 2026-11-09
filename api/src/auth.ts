@@ -38,8 +38,8 @@ async function sign(env: Env, user: User, exp: number) {
   return `${b64u(payload)}.${b64u(sig)}`;
 }
 
-export async function authenticate(req: Request, env: Env): Promise<User> {
-  const m = /^Bearer ([\w-]+)\.([\w-]+)$/.exec(req.headers.get('authorization') ?? '');
+async function verify(env: Env, token: string | undefined): Promise<User> {
+  const m = /^([\w-]+)\.([\w-]+)$/.exec(token ?? '');
   if (!m) throw unauthorized();
   const key = await hmacKey(env);
   let payload: Uint8Array, sig: Uint8Array;
@@ -52,6 +52,42 @@ export async function authenticate(req: Request, env: Env): Promise<User> {
   const [user, exp] = new TextDecoder().decode(payload).split('.');
   if (!isUser(user) || !(Number(exp) > now())) throw unauthorized();
   return user;
+}
+
+const bearer = (req: Request) => /^Bearer (\S+)$/.exec(req.headers.get('authorization') ?? '')?.[1];
+
+/** 业务接口只认 Bearer：图片 Cookie 不能用来调其他接口，不引入 CSRF 面 */
+export const authenticate = (req: Request, env: Env) => verify(env, bearer(req));
+
+// ---- 图片 Cookie：<img> 带不了 Authorization 头，读图只能靠 Cookie ----
+// 值就是 Bearer token（不另造凭据）；Path 限定 /api/files，HttpOnly 让 JS 读不到。
+const FILE_COOKIE = 'tb_files';
+const fileCookieOf = (req: Request) => /(?:^|;\s*)tb_files=([\w.-]+)/.exec(req.headers.get('cookie') ?? '')?.[1];
+
+/** 读图鉴权：先 Bearer（skill / curl），再 Cookie（浏览器） */
+export const fileUser = (req: Request, env: Env) => verify(env, bearer(req) ?? fileCookieOf(req));
+
+/** 本机调试（http://127.0.0.1）不加 Secure：http 下 WebKit 会直接丢掉 Secure Cookie */
+function fileCookie(req: Request, value: string, maxAge: number) {
+  const secure = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(req.url).hostname) ? '' : '; Secure';
+  return `${FILE_COOKIE}=${value}; Path=/api/files; Max-Age=${maxAge}; HttpOnly; SameSite=Strict${secure}`;
+}
+
+/**
+ * Bearer 鉴权成功后调用：Cookie 缺失或与 token 不一致就补发。
+ * 前端每次启动都先拉 /board，图片只会在那之后渲染，所以已登录设备、旧版前端都无感拿到 Cookie。
+ */
+export function syncFileCookie(req: Request, res: Response) {
+  const token = bearer(req);
+  if (token && fileCookieOf(req) !== token) res.headers.append('set-cookie', fileCookie(req, token, TTL / 1000));
+  return res;
+}
+
+/** 退出：HttpOnly Cookie 前端删不掉，由服务端下发过期 */
+export async function logout({ req }: Ctx) {
+  const res = json({ ok: true });
+  res.headers.append('set-cookie', fileCookie(req, '', 0));
+  return res;
 }
 
 export async function login({ req, env }: Ctx) {

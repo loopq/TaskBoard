@@ -110,8 +110,8 @@ echo '== 任务与拖拽 §5'
 req POST /tasks "{\"column_id\":\"$DONE\",\"title\":\"x\"}"; check '不能在已完成里新建 → 400' 400
 req POST /tasks "{\"column_id\":\"$TODO\",\"title\":\"  \"}"; check '空标题 → 400' 400
 req POST /tasks "{\"column_id\":\"$TODO\"}"; check '缺标题 → 400' 400
-req POST /tasks "{\"column_id\":\"$TODO\",\"title\":\"任务1\",\"priority\":3}"; check '新建任务' 201 \
-  ".column_id == \"$TODO\" and .priority == 3 and .done_at == null and .sub_total == 0"
+req POST /tasks "{\"column_id\":\"$TODO\",\"title\":\"任务1\",\"priority\":3}"; check '新建任务，分配编号 #1' 201 \
+  ".column_id == \"$TODO\" and .priority == 3 and .done_at == null and .sub_total == 0 and .no == 1"
 T1=$(j .id)
 req POST "/tasks/$T1/move" "{\"column_id\":\"$DONE\",\"sort\":1}"; check '拖入已完成 → 400' 400
 req POST "/tasks/$T1/move" "{\"column_id\":\"$COL\",\"sort\":1}"; check '待处理 → 普通列' 200 ".task.column_id == \"$COL\""
@@ -191,7 +191,8 @@ req PATCH "/columns/$DOING" '{"name":"hack"}'; check '改他人列名' 404
 req PATCH "/columns/$DOING" '{"sort":0.5}'; check '排他人列' 404
 req DELETE "/columns/$DOING"; check '删他人列' 404
 req DELETE "/tasks/$T1"; check '删他人任务' 404
-req POST /tasks "{\"column_id\":\"$BTODO\",\"title\":\"lvcui 的任务\"}"; check 'lvcui 在自己列里建任务' 201
+req POST /tasks "{\"column_id\":\"$BTODO\",\"title\":\"lvcui 的任务\"}"; check 'lvcui 在自己列里建任务，编号全局递增 #2' 201 '.no == 2'
+req GET /board; check 'lvcui 看板卡片带编号' 200 '[.tasks[].no] == [2]'
 BT1=$(j .id)
 req PATCH "/tasks/$BT1/subtasks/$S1" '{"done":false}'; check '借自己的任务路径改他人子任务' 404
 req DELETE "/tasks/$BT1/subtasks/$S1"; check '借自己的任务路径删他人子任务' 404
@@ -199,6 +200,7 @@ req DELETE "/tasks/$BT1/comments/$C1"; check '借自己的任务路径删他人�
 TOK=$A
 req POST "/tasks/$T1/move" "{\"column_id\":\"$BTODO\",\"sort\":1}"; check 'zhuhu 把自己任务移进 lvcui 的列' 404
 req GET "/tasks/$BT1"; check 'zhuhu 读 lvcui 的任务' 404
+req GET "/tasks/$T1"; check '详情带编号' 200 '.task.no == 1'
 req GET "/tasks/$T1"; check 'zhuhu 的数据没被改动' 200 \
   '.task.title == "任务1改" and .task.column_id == "zhuhu-todo" and .subtasks[0].done == 1 and (.timeline | map(select(.kind == "user")) | length == 1)'
 req GET /board; check 'zhuhu 看板里没有 lvcui 的任务' 200 "[.tasks[].id] | index(\"$BT1\") == null"
@@ -235,14 +237,77 @@ req GET "/tasks/$T1"; check '删除后 404' 404
 LEFT=$(sql "SELECT (SELECT COUNT(*) FROM subtasks WHERE task_id = '$T1') + (SELECT COUNT(*) FROM comments WHERE task_id = '$T1') AS n" | jq '.[0].n')
 if [[ $LEFT == 0 ]]; then ok '子任务和评论被外键级联删除'; else ng '级联删除' "残留 $LEFT 行"; fi
 
+echo '== 任务编号迁移：旧库补 no 列（仅本地）'
+if [[ -n $SERVER ]]; then
+  cat >"$TMP/migrate.mts" <<'TS'
+import { DatabaseSync } from 'node:sqlite';
+const { openDb } = await import(process.argv[3]);
+const path = process.argv[2];
+const old = new DatabaseSync(path); // 上一版 schema 的 tasks 表（没有 no 列）
+old.exec(`CREATE TABLE columns (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, sort REAL NOT NULL);
+  CREATE TABLE tasks (id TEXT PRIMARY KEY, owner TEXT NOT NULL, column_id TEXT NOT NULL REFERENCES columns(id),
+    title TEXT NOT NULL, desc_md TEXT NOT NULL DEFAULT '', sort REAL NOT NULL, priority INTEGER NOT NULL DEFAULT 0,
+    due_at INTEGER, done_at INTEGER, prev_column_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+  INSERT INTO columns VALUES ('c', 'zhuhu', '待处理', 'todo', 0);
+  INSERT INTO tasks (id, owner, column_id, title, sort, created_at, updated_at) VALUES
+    ('late', 'zhuhu', 'c', '后建', 1, 300, 300), ('early', 'lvcui', 'c', '先建', 2, 100, 100), ('mid', 'zhuhu', 'c', '中间', 3, 200, 200);`);
+old.close();
+for (let i = 0; i < 2; i++) openDb(path).raw.close(); // 打开两次：第二次必须是 no-op
+const d = new DatabaseSync(path, { readOnly: true });
+console.log(JSON.stringify({
+  rows: d.prepare('SELECT id, no FROM tasks ORDER BY no').all(),
+  unique: d.prepare("SELECT \"unique\" AS u FROM pragma_index_list('tasks') WHERE name = 'idx_tasks_no'").get()?.u,
+}));
+TS
+  B=$(node --disable-warning=ExperimentalWarning "$TMP/migrate.mts" "$TMP/old.db" "$PWD/src/sqlite.ts" 2>&1)
+  S=200; check '按创建顺序回填 1..n，建唯一索引，重复打开幂等' 200 \
+    '.rows == [{"id":"early","no":1},{"id":"mid","no":2},{"id":"late","no":3}] and .unique == 1'
+else
+  echo '  - 外部模式跳过（镜像里没有测试脚本目录）'
+fi
+
 echo '== 图片上传 §6'
 echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' | base64 -d >"$TMP/a.png"
 up image/png "$TMP/a.png"; check '上传 png，返回相对路径 /files/<uid>/<uuid>.png' 201 '.url | test("^/files/zhuhu/[0-9a-f-]{36}\\.png$")'
 URL=$(j .url)
-H=$(curl -s -D - -o "$TMP/got.png" "$API$URL")
-if grep -qi '^content-type: image/png' <<<"$H" && grep -qi '^x-content-type-options: nosniff' <<<"$H" && cmp -s "$TMP/a.png" "$TMP/got.png"; then
-  ok '/files 不鉴权可读，内容一致，带 nosniff'
+# fget 期望状态码 描述 [curl 额外参数…] → 读图片，状态码对得上算通过
+fget() {
+  local want=$1 desc=$2
+  shift 2
+  S=$(curl -s -o "$TMP/got.png" -w '%{http_code}' "$@" "$API$URL")
+  check "$desc" "$want"
+}
+H=$(curl -s -D - -o "$TMP/got.png" -H "authorization: Bearer $TOK" "$API$URL" | tr -d '\r')
+if grep -qi '^content-type: image/png' <<<"$H" && grep -qi '^x-content-type-options: nosniff' <<<"$H" \
+  && grep -qi '^cache-control: private' <<<"$H" && cmp -s "$TMP/a.png" "$TMP/got.png"; then
+  ok '/files 本人带 Bearer 可读，内容一致，nosniff + private 缓存'
 else ng '/files 读取' "$H"; fi
+fget 401 '/files 不带凭据 → 401（外部用户拿到链接也打不开）'
+fget 404 '/files 用他人 token 读 → 404' -H "authorization: Bearer $BT"
+fget 401 '/files 乱写 token → 401' -H 'authorization: Bearer garbage'
+
+echo '== 图片 Cookie §6'
+H=$(curl -s -D - -o /dev/null -H "authorization: Bearer $TOK" "$API/board" | tr -d '\r')
+if grep -q "^set-cookie: tb_files=$TOK; Path=/api/files; Max-Age=31536000; HttpOnly; SameSite=Strict$" <<<"$H"; then
+  ok 'Bearer 鉴权成功的接口下发图片 Cookie（Path=/api/files、HttpOnly、SameSite=Strict，本机不加 Secure）'
+else ng '下发图片 Cookie' "$(grep -i set-cookie <<<"$H")"; fi
+H=$(curl -s -D - -o /dev/null -H "authorization: Bearer $TOK" -H 'host: task.loopq.cn' "$API/board" | tr -d '\r')
+grep -qi '^set-cookie: tb_files=.*; Secure$' <<<"$H" && ok '正式域名下 Cookie 带 Secure' || ng 'Secure' "$(grep -i set-cookie <<<"$H")"
+H=$(curl -s -D - -o /dev/null -H "authorization: Bearer $TOK" -H "cookie: tb_files=$TOK" "$API/board" | tr -d '\r')
+grep -qi '^set-cookie' <<<"$H" && ng '重复下发' "$H" || ok 'Cookie 与 token 一致时不重复下发'
+H=$(curl -s -D - -o /dev/null -H "authorization: Bearer $TOK" -H "cookie: tb_files=$BT" "$API/board" | tr -d '\r')
+grep -q "^set-cookie: tb_files=$TOK;" <<<"$H" && ok '换了账号（Cookie 与 token 不一致）时重新下发' || ng '重新下发' "$H"
+H=$(curl -s -D - -o /dev/null "$API/board" | tr -d '\r')
+grep -qi '^set-cookie' <<<"$H" && ng '未鉴权下发' "$H" || ok '鉴权失败的请求不下发 Cookie'
+fget 200 '/files 本人 Cookie 可读（浏览器 <img> 走这条）' -H "cookie: tb_files=$TOK"
+cmp -s "$TMP/a.png" "$TMP/got.png" && ok 'Cookie 读到的内容一致' || ng 'Cookie 读取内容' '与上传不一致'
+fget 404 '/files 他人 Cookie → 404' -H "cookie: tb_files=$BT"
+fget 401 '/files 篡改 Cookie → 401' -H "cookie: tb_files=${TOK%.*}.$(printf x | b64u)"
+fget 200 'Cookie 夹在其他 Cookie 中间也能识别' -H "cookie: a=1; tb_files=$TOK; b=2"
+S=$(curl -s -o /dev/null -w '%{http_code}' -H "cookie: tb_files=$TOK" "$API/board")
+check '图片 Cookie 不能访问其他接口 → 401（不引入 CSRF 面）' 401
+H=$(curl -s -D - -o /dev/null -X POST "$API/logout" | tr -d '\r')
+grep -q '^set-cookie: tb_files=; Path=/api/files; Max-Age=0; HttpOnly; SameSite=Strict$' <<<"$H" && ok 'logout 下发过期 Cookie，清掉图片凭据' || ng 'logout' "$H"
 up image/webp "$TMP/a.png" ''; check '未登录上传 → 401' 401
 printf '<script>alert(1)</script>' >"$TMP/x.html"
 up text/html "$TMP/x.html"; check '非图片类型 → 415' 415
@@ -251,8 +316,8 @@ head -c $((5 * 1024 * 1024 + 1)) /dev/zero >"$TMP/big.bin"
 up image/jpeg "$TMP/big.bin"; check '超过 5MB → 413' 413
 : >"$TMP/empty.bin"
 up image/jpeg "$TMP/empty.bin"; check '空文件 → 400' 400
-S=$(curl -s -o /dev/null -w '%{http_code}' --path-as-is "$API/files/zhuhu/../../etc/passwd"); check '非法 key → 404' 404
-S=$(curl -s -o /dev/null -w '%{http_code}' "$API/files/zhuhu/00000000-0000-0000-0000-000000000000.png"); check '不存在的图片 → 404' 404
+S=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $TOK" --path-as-is "$API/files/zhuhu/../../etc/passwd"); check '非法 key → 404' 404
+S=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer $TOK" "$API/files/zhuhu/00000000-0000-0000-0000-000000000000.png"); check '不存在的图片 → 404' 404
 
 echo '== 防爆破 §3'
 for _ in 1 2 3 4 5; do req POST /login "$(cred lvcui wrong)" ''; done

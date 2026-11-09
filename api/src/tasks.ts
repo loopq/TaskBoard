@@ -7,7 +7,7 @@ import type { Db } from './sqlite.ts';
  * 已知天花板：/board 一次返回全部任务（含所有已完成）。两个人用，几千条以内无压力；
  * 以后「已完成」太多再给它加分页 / 只返回最近 N 条。
  */
-const CARD_SQL = `SELECT t.id, t.column_id, t.title, t.sort, t.priority, t.due_at, t.done_at,
+const CARD_SQL = `SELECT t.id, t.no, t.column_id, t.title, t.sort, t.priority, t.due_at, t.done_at,
   (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id) AS sub_total,
   (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.done = 1) AS sub_done,
   (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id AND c.kind = 'user') AS comment_count
@@ -83,8 +83,11 @@ export async function createTask({ req, env, uid }: Ctx) {
   await db.batch([
     db
       .prepare(
-        `INSERT INTO tasks (id, owner, column_id, title, desc_md, priority, due_at, sort, created_at, updated_at)
-         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, COALESCE(MAX(sort), 0) + 1, ?8, ?8 FROM tasks WHERE owner = ?2 AND column_id = ?3`,
+        // 编号全局递增（唯一索引兜底；单进程 + 事务内执行，没有竞态）。
+        // 已知天花板：删掉当前最大编号的任务后，下一条会复用这个号；要杜绝就换独立计数器表
+        `INSERT INTO tasks (id, owner, column_id, title, desc_md, priority, due_at, sort, no, created_at, updated_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, COALESCE(MAX(sort), 0) + 1, (SELECT COALESCE(MAX(no), 0) + 1 FROM tasks), ?8, ?8
+         FROM tasks WHERE owner = ?2 AND column_id = ?3`,
       )
       .bind(id, uid, col.id, f.title, f.desc_md, f.priority, f.due_at, t),
     comment(db, id, 'system', '创建了任务', t),

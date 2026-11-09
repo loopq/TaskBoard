@@ -77,7 +77,8 @@ CREATE TABLE tasks (
   priority INTEGER NOT NULL DEFAULT 0,      -- 0 无 / 1 较低 / 2 普通 / 3 紧急 / 4 非常紧急
   due_at INTEGER,                           -- unix ms
   done_at INTEGER, prev_column_id TEXT,     -- 完成时记录来源列
-  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  no INTEGER                                -- 任务编号 #12（2026-11-09 增补，见 taskboard-feishu-ui-task-id-skill.md）
 );
 CREATE TABLE subtasks (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -115,7 +116,7 @@ CREATE INDEX idx_comments_task ON comments(task_id, created_at);
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | /login | 登录，返回 token |
-| GET | /board | 列 + 任务卡片（带子任务进度、评论数） |
+| GET | /board | 列 + 任务卡片（带编号 `no`、子任务进度、评论数） |
 | POST / PATCH / DELETE | /columns[/:id] | 列的增、改名排序、删 |
 | POST | /tasks | 新建（指定列，不能是 done） |
 | GET | /tasks/:id | 详情 + 子任务 + 时间线 |
@@ -126,18 +127,21 @@ CREATE INDEX idx_comments_task ON comments(task_id, created_at);
 | POST / PATCH / DELETE | /tasks/:id/subtasks[/:sid] | 子任务 |
 | POST / DELETE | /tasks/:id/comments[/:cid] | 评论（system 类型不可删） |
 | POST | /upload | 上传图片，返回 `{url}` |
-| GET | /files/:key | 从 R2 读图（公开） |
+| GET | /files/:key | 读图：只有本人能读（Bearer 或图片 Cookie），见下 |
+| POST | /logout | 清除图片 Cookie |
 
 - **图片**：前端先用 canvas 压缩成 webp（长边不超过 1920px），key = `uid/uuidv4.webp`，大小限制 5MB。
-- **已知天花板**：`<img>` 标签带不了 Authorization 头，所以 `/files` 不鉴权，靠 128 位随机 key 不可猜来保护。删除任务时不清理 R2 里的图片（成本可以忽略）。如果以后需要严格保护，升级路径是改成短期签名 URL。
+- **图片鉴权**（2026-11-09 起，见 [taskboard-image-auth-viewer.md](taskboard-image-auth-viewer.md)）：`<img>` 带不了 Authorization 头，所以浏览器读图靠 HttpOnly Cookie `tb_files`：Path 限定 `/api/files`，SameSite=Strict，值就是 Bearer token，由任一次 Bearer 鉴权成功的请求自动下发。skill / curl 读图用 Bearer。未登录返回 401，读别人的图返回 404；Cookie 不能用来调其他接口。缓存头为 `private`；已知天花板是退出后，本机缓存里已经看过的图片还在。删除任务时不清理图片文件（成本可以忽略）。
 - CORS 只放行 `https://task.loopq.cn` 和 `http://localhost:5173`。
 
 ## 7. 前端
 
 - `/`：两张用户卡片「zhuhu 🔐 / lvcui 🔐」；如果已登录，直接跳转看板。
 - 点卡片 → 输入密码 → 进入看板。看板右上角显示当前用户名和退出按钮。
-- **看板（桌面）**：各列横向排列，列头显示名称、数量和 `···` 菜单（改名 / 删除，锁定列没有菜单），最右边是「+ 新建列」。卡片样式参考 Teambition：○ 完成圆圈、标题、优先级旗标、截止日期（过期标红）、子任务进度 `0/3`、评论数。
-- **详情抽屉**（桌面在右侧，移动端全屏）：参考飞书。顶部「✓ 完成任务 / 取消完成」，然后是标题、列选择器（下拉里不含「已完成」）、优先级、截止日期（原生 `<input type="date">`）、描述（Markdown 编辑/预览）、子任务、时间线（评论 + 动态），底部是评论输入框（支持 Markdown 和贴图）。
+> 2026-11-09 起 UI 改为飞书风格（白底、飞书蓝），新增任务编号、详情链接 `/?t=12` 和 AI skill，详见 [taskboard-feishu-ui-task-id-skill.md](taskboard-feishu-ui-task-id-skill.md)。
+
+- **看板（桌面）**：各列横向排列，列头显示名称、数量和 `···` 菜单（改名 / 删除，锁定列没有菜单），最右边是「+ 新建列」。卡片样式对齐飞书：○ 完成圆圈、标题、右上角编号 `#12`、截止日期（过期标红）、优先级、子任务进度 `0/3`、评论数。列底部「+ 新建任务」是常驻输入框：回车、点「添加」、失焦时有内容都会创建。
+- **详情抽屉**（桌面在右侧，移动端全屏）：对齐飞书。顶部「✓ 完成任务 / 取消完成」，右侧是 `#12`（点击复制详情链接）、删除、关闭；然后是标题和带图标的字段行：列选择器（下拉里不含「已完成」）、截止日期（快捷「今天 / 明天 / 其他时间」，其他时间用原生 `<input type="date">`）、优先级、描述（点击编辑，Markdown + 贴图）、子任务；再往下是时间线（评论 + 动态），底部是评论输入框（支持 Markdown 和贴图）。
 - **移动端**：列用 `scroll-snap` 横向滑动，每列宽 88vw；SortableJS 设置 `delay: 200, delayOnTouchOnly`，长按后才开始拖动，避免和滚动冲突；详情里的列选择器作为备用的移动方式。
 - **PWA**：`manifest.webmanifest`（`display: standalone`）、`apple-touch-icon`、`apple-mobile-web-app-capable`，加上一个只缓存静态资源的 service worker（数据不做离线）。
 - 刷新策略：页面重新可见（`visibilitychange`）时重新拉 `/board`。只有自己一个人在操作，不需要实时推送。

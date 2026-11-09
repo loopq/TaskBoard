@@ -106,7 +106,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url ?? '/', 'http://taskboard.local');
+    // 带上真实 Host（业务代码据此判断是否本机调试，例如图片 Cookie 要不要加 Secure）；Host 非法时退回占位域名
+    const origin = `http://${req.headers.host ?? ''}`;
+    const url = new URL(req.url ?? '/', URL.canParse(origin) ? origin : 'http://taskboard.local');
     if (url.pathname.startsWith('/api/')) await api(req, res, url);
     else serveStatic(req, res, url.pathname);
   } catch (e) {

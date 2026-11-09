@@ -18,7 +18,7 @@ fi
 [[ $archive == source.tar.gz ]] || mv "$archive" source.tar.gz
 mkdir -p source
 python3 - "$release" <<'PY'
-import hashlib, json, pathlib, sys, tarfile
+import hashlib, json, os, pathlib, sys, tarfile
 root = pathlib.Path('source')
 with tarfile.open('source.tar.gz') as archive:
     members = archive.getmembers()
@@ -35,9 +35,14 @@ with tarfile.open('source.tar.gz') as archive:
         assert hashlib.sha256(archive.extractfile(name).read()).hexdigest() == digest, name
     archive.extractall(root, filter='data')
 # tar 只列文件，父目录受 root 的 umask 077 影响；镜像里的 uid 1000 必须能遍历静态目录。
+# 包里的 mtime 统一是 0（可复现打包）。docker build 按「大小 + mtime + 权限」增量同步构建上下文，
+# 同大小的改动文件（例如只换了 8 位资源 hash 的 index.html）会被当成没变、沿用上次的旧内容：
+# 解包后把文件 mtime 刷成当前时间，强制每次都传最新内容。
 for path in root.rglob('*'):
     if path.is_dir():
         path.chmod(0o755)
+    else:
+        os.utime(path)
 print('RELEASE_MANIFEST_VERIFIED', manifest['git_base'])
 PY
 cd source

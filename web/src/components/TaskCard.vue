@@ -28,17 +28,17 @@ const toggle = () => (done.value ? uncomplete : complete)(props.task.id);
     </button>
     <div class="card-body">
       <p class="card-title">{{ task.title }}</p>
-      <div v-if="task.priority || task.due_at || task.sub_total || task.comment_count" class="card-meta mono">
+      <div v-if="task.priority || task.due_at || task.sub_total || task.comment_count" class="card-meta">
+        <span v-if="task.due_at" class="due" :class="{ overdue }"><Icon name="calendar" :size="13" />{{ dateLabel(task.due_at) }} 截止</span>
         <span v-if="task.priority" class="flag" :title="`优先级：${PRIORITIES[task.priority]}`">
-          <Icon name="flag" :size="12" />{{ PRIORITIES[task.priority] }}
+          <Icon name="flag" :size="13" />{{ PRIORITIES[task.priority] }}
         </span>
-        <span v-if="task.due_at" class="due" :class="{ overdue }"><Icon name="calendar" :size="12" />{{ dateLabel(task.due_at) }}</span>
         <span v-if="task.sub_total" :class="{ alldone: task.sub_done === task.sub_total }">
-          <Icon name="subtasks" :size="12" />{{ task.sub_done }}/{{ task.sub_total }}
+          <Icon name="subtasks" :size="13" />{{ task.sub_done }}/{{ task.sub_total }}
         </span>
-        <span v-if="task.comment_count"><Icon name="comment" :size="12" />{{ task.comment_count }}</span>
+        <span v-if="task.comment_count"><Icon name="comment" :size="13" />{{ task.comment_count }}</span>
       </div>
     </div>
-    <span v-if="done" class="seal" aria-hidden="true">完</span>
+    <span class="card-no mono" title="任务编号">#{{ task.no }}</span>
   </article>
 </template>

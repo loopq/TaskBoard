@@ -1,4 +1,4 @@
-import { authenticate, login } from './auth.ts';
+import { authenticate, login, logout, syncFileCookie } from './auth.ts';
 import { createColumn, deleteColumn, patchColumn } from './columns.ts';
 import { getFile, upload } from './files.ts';
 import { type Ctx, type Env, HttpError, json } from './http.ts';
@@ -22,7 +22,8 @@ const health: Handler = async ({ env }) => {
 const routes = [
   route('GET', '/health', health, true),
   route('POST', '/login', login, true),
-  route('GET', '/files/*', getFile, true),
+  route('POST', '/logout', logout, true),
+  route('GET', '/files/*', getFile, true), // 不走 Bearer 必选：getFile 自己认 Bearer 或图片 Cookie
   route('GET', '/board', t.board),
   route('POST', '/columns', createColumn),
   route('PATCH', '/columns/:id', patchColumn),
@@ -48,7 +49,8 @@ async function dispatch(req: Request, env: Env): Promise<Response> {
     const m = r.method === req.method && r.re.exec(pathname);
     if (!m) continue;
     const uid = r.isPublic ? '' : await authenticate(req, env);
-    return r.handler({ req, env, uid }, m.slice(1));
+    const res = await r.handler({ req, env, uid }, m.slice(1));
+    return r.isPublic ? res : syncFileCookie(req, res);
   }
   throw new HttpError(404, '接口不存在');
 }

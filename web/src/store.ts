@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { api, session, setUnauthorizedHandler } from './api';
 
 export type Kind = 'todo' | 'normal' | 'done';
@@ -10,6 +10,8 @@ export interface Column {
 }
 export interface Card {
   id: string;
+  /** 任务编号 #12：全局递增，用于详情链接 /?t=12 */
+  no: number;
   column_id: string;
   title: string;
   sort: number;
@@ -76,12 +78,36 @@ function upsert(card: Card) {
   else state.tasks.push(card);
 }
 
+// ---- 详情链接 /?t=12 ----
+// 打开详情时写进地址栏、关闭时清掉；用 replaceState 不产生历史记录，不用处理返回键。
+// 查询参数而不是 /t/12 路径：服务端静态白名单和 Service Worker 的导航缓存都不用改
+export const taskUrl = (no: number) => `${location.origin}/?t=${no}`;
+const urlNo = () => Number(new URLSearchParams(location.search).get('t')) || 0;
+watch(
+  () => state.openId,
+  (id) => {
+    const no = id ? findTask(id)?.no : undefined;
+    history.replaceState(history.state, '', no ? `/?t=${no}` : '/');
+  },
+);
+
+/** 每次拉完看板：地址栏带 ?t= 就打开那条（首次打开链接、登录后都走这里；已打开时是 no-op） */
+function openFromUrl() {
+  const no = urlNo();
+  if (!no) return;
+  const t = state.tasks.find((t) => t.no === no);
+  if (t) return void (state.openId = t.id);
+  toast(`任务 #${no} 不存在`);
+  history.replaceState(history.state, '', '/');
+}
+
 export async function load() {
   if (!state.user) return;
   const b = await api<{ columns: Column[]; tasks: Card[] }>('GET', '/board');
   state.columns = b.columns;
   state.tasks = b.tasks;
   state.loaded = true;
+  openFromUrl();
 }
 
 export async function login(user: string, password: string) {
@@ -93,6 +119,8 @@ export async function login(user: string, password: string) {
 
 export function logout() {
   session.clear();
+  // 图片 Cookie 是 HttpOnly，前端删不掉，让服务端下发过期；失败也无妨，Cookie 里的 token 到期自然失效
+  api('POST', '/logout').catch(() => {});
   Object.assign(state, { user: null, columns: [], tasks: [], loaded: false, openId: null });
 }
 

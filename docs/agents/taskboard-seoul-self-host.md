@@ -130,3 +130,8 @@
 - taskboard 仓库此前没有首次提交；本次归档应用源码、依赖锁文件、部署脚本和方案/交接记录。密钥、本地数据库、依赖目录、前端构建及发布压缩包由忽略规则排除。
 - 已在 `tencent-ubuntu/docs/agents/taskboard-seoul-deployment.md` 留存组件、当前 release/镜像、服务器目录与权限、Caddy 追加与备份、备份/密码运维、验证结果和待用户验收项；服务器初始配置总记录已加入索引。该仓库沿用脱敏约定，不记录真实服务器 IP、个人机器绝对路径或凭据。
 - 归档前再次只读复核：当前 release `83ed8b56bad1917f4f6b`，公网 health 正常，容器 healthy/非 root/只读/无宿主端口，备份 timer active。此次归档不修改服务器配置或生产数据。
+
+## 12. 飞书风格改版发布（2026-11-09）
+
+- 当前生产 release 更新为 **`f48257ab8dd29c6891f6`**（任务编号、详情链接、飞书风格 UI、手机端修复）。验证记录见 [taskboard-feishu-ui-task-id-skill.md §9](taskboard-feishu-ui-task-id-skill.md)。
+- 发布流水线修复：`taskboard-release` 解包后刷新文件 mtime，避免 docker build 增量同步上下文时把大小相同的改动文件（`index.html`）当成没变。

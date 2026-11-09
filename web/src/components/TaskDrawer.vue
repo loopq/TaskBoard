@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { api } from '../api';
-import { PRIORITIES, fromDateInput, timeLabel, toDateInput } from '../format';
+import { PRIORITIES, dateLabel, dayFromToday, fromDateInput, isOverdue, timeLabel, toDateInput } from '../format';
 import { renderMd } from '../md';
-import { byColumn, columns, complete, deleteTask, findTask, lastChange, moveTask, patchTask, run, state, toast, uncomplete } from '../store';
+import { byColumn, columns, complete, deleteTask, findTask, lastChange, moveTask, patchTask, run, state, taskUrl, toast, uncomplete } from '../store';
+import AddInput from './AddInput.vue';
 import Icon from './Icon.vue';
+import ImageViewer from './ImageViewer.vue';
 import MdInput from './MdInput.vue';
 
 interface Subtask {
@@ -31,7 +33,6 @@ const desc = ref('');
 const descMode = ref<'edit' | 'preview'>('preview');
 const subtasks = ref<Subtask[]>([]);
 const timeline = ref<Entry[]>([]);
-const subDraft = ref('');
 const comment = ref('');
 const sending = ref(false);
 const drawerEl = ref<HTMLElement>();
@@ -39,6 +40,8 @@ const drawerEl = ref<HTMLElement>();
 const fit = (el: HTMLTextAreaElement) => ((el.style.height = 'auto'), (el.style.height = `${el.scrollHeight}px`));
 const vAutosize = { mounted: fit, updated: fit };
 const timelineEl = ref<HTMLElement>();
+const descInput = ref<InstanceType<typeof MdInput>>();
+const viewer = ref<InstanceType<typeof ImageViewer>>();
 
 async function fetchDetail(id: string, reset: boolean) {
   const r = await api<{ task: { title: string; desc_md: string }; subtasks: Subtask[]; timeline: Entry[] }>('GET', `/tasks/${id}`);
@@ -84,7 +87,6 @@ watch(
     subtasks.value = [];
     timeline.value = [];
     comment.value = '';
-    subDraft.value = '';
     if (!id) return;
     await nextTick();
     drawerEl.value?.focus();
@@ -104,8 +106,9 @@ function close() {
   flush();
   state.openId = null;
 }
+// 图片预览（<dialog>）打开时 Esc 只关预览，不连带关掉抽屉
 const onKey = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && state.openId && !(e.target as HTMLElement).closest('input, textarea, select')) close();
+  if (e.key === 'Escape' && state.openId && !(e.target as HTMLElement).closest('input, textarea, select, dialog')) close();
 };
 window.addEventListener('keydown', onKey);
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
@@ -118,6 +121,24 @@ function changeColumn(colId: string) {
 }
 const changePriority = (v: string) => card.value && patchTask(card.value.id, { priority: Number(v) });
 const changeDue = (v: string) => card.value && patchTask(card.value.id, { due_at: fromDateInput(v) });
+const setDue = (days: number) => card.value && patchTask(card.value.id, { due_at: dayFromToday(days) });
+/** 「其他时间」：桌面浏览器点日期框本体不弹日历，主动 showPicker；iOS 点上去本来就弹 */
+function showPicker(e: MouseEvent) {
+  try {
+    (e.currentTarget as HTMLInputElement).showPicker?.();
+  } catch {
+    // 不支持或不在用户手势里：退回浏览器默认行为
+  }
+}
+/** 复制详情链接（给 AI / 自己用）。剪贴板不可用时退回 prompt，让用户手动复制 */
+function copyLink() {
+  const t = card.value;
+  if (!t) return;
+  const url = taskUrl(t.no);
+  const fallback = () => void prompt('复制任务链接', url);
+  if (!navigator.clipboard) return fallback();
+  navigator.clipboard.writeText(url).then(() => toast(`已复制 #${t.no} 的链接`), fallback);
+}
 function removeTask() {
   const t = card.value;
   if (t && confirm(`删除任务「${t.title}」？子任务和评论会一起删除。`)) deleteTask(t.id);
@@ -127,10 +148,22 @@ function showPreview() {
   saveDesc();
   descMode.value = 'preview';
 }
+async function editDesc() {
+  descMode.value = 'edit';
+  await nextTick();
+  descInput.value?.focus();
+}
 function onPreviewClick(e: MouseEvent) {
   const el = e.target as HTMLElement;
-  if (el instanceof HTMLImageElement) return window.open(el.src, '_blank', 'noopener');
-  if (!el.closest('a')) descMode.value = 'edit';
+  if (!(el instanceof HTMLImageElement) && !el.closest('a')) editDesc(); // 点图片交给 onImageClick
+}
+/** 描述和评论里的图片：点击打开居中预览，可在本任务的所有图片之间翻页（按页面顺序） */
+function onImageClick(e: MouseEvent) {
+  const img = (e.target as HTMLElement).closest<HTMLImageElement>('.md img');
+  if (!img) return;
+  e.preventDefault(); // 图片包在链接里时也不跳走
+  const all = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLImageElement>('.md img')];
+  viewer.value?.open(all.map((i) => i.src), all.indexOf(img));
 }
 
 // ---- 子任务 / 评论：改完同步卡片上的计数 ----
@@ -143,10 +176,8 @@ function syncCounts() {
 }
 const base = () => `/tasks/${loadedId.value}`;
 
-async function addSub() {
-  const t = subDraft.value.trim();
-  if (!t || !loadedId.value) return;
-  subDraft.value = '';
+async function addSub(t: string) {
+  if (!loadedId.value) return;
   const s = await run(() => api<Subtask>('POST', `${base()}/subtasks`, { title: t }));
   if (s) subtasks.value.push(s);
   syncCounts();
@@ -199,15 +230,18 @@ async function removeComment(c: Entry) {
     <div v-if="state.openId" class="drawer-wrap" @click.self="close">
       <aside ref="drawerEl" class="drawer" role="dialog" aria-modal="true" aria-label="任务详情" tabindex="-1">
         <header class="drawer-top">
-          <button v-if="card" class="btn" :class="done ? 'done-btn' : 'primary'" @click="toggleDone">
+          <button v-if="card" class="btn" :class="done ? 'done-btn' : 'outline'" @click="toggleDone">
             <Icon name="check" :size="15" />{{ done ? '已完成 · 取消完成' : '完成任务' }}
           </button>
           <span class="spacer" />
+          <button v-if="card" class="btn ghost small task-no" title="复制任务链接" @click="copyLink">
+            <Icon name="link" :size="15" /><span class="mono">#{{ card.no }}</span>
+          </button>
           <button class="icon-btn" aria-label="删除任务" title="删除任务" @click="removeTask"><Icon name="trash" :size="17" /></button>
           <button class="icon-btn" aria-label="关闭" title="关闭（Esc）" @click="close"><Icon name="close" :size="19" /></button>
         </header>
 
-        <div v-if="card && loadedId === card.id" class="drawer-body">
+        <div v-if="card && loadedId === card.id" class="drawer-body" @click="onImageClick">
           <textarea
             v-model="title"
             v-autosize
@@ -220,73 +254,92 @@ async function removeComment(c: Entry) {
             @keydown.enter.prevent="($event.target as HTMLElement).blur()"
           />
 
-          <dl class="fields">
-            <dt>所在列</dt>
-            <dd>
-              <select v-if="!done" class="field select" :value="card.column_id" @change="changeColumn(($event.target as HTMLSelectElement).value)">
+          <div class="rows">
+            <div class="row" title="所在列">
+              <Icon name="columns" class="row-icon" />
+              <select v-if="!done" class="pill-select" aria-label="所在列" :value="card.column_id" @change="changeColumn(($event.target as HTMLSelectElement).value)">
                 <option v-for="c in movable" :key="c.id" :value="c.id">{{ c.name }}</option>
               </select>
-              <span v-else class="field-static">已完成 <small>（取消完成后回到原列）</small></span>
-            </dd>
-            <dt>优先级</dt>
-            <dd>
-              <select class="field select" :class="`p${card.priority}`" :value="card.priority" @change="changePriority(($event.target as HTMLSelectElement).value)">
-                <option v-for="(p, i) in PRIORITIES" :key="i" :value="i">{{ p }}</option>
-              </select>
-            </dd>
-            <dt>截止日期</dt>
-            <dd class="due-field">
-              <input class="field" type="date" :value="toDateInput(card.due_at)" @change="changeDue(($event.target as HTMLInputElement).value)" />
-              <button v-if="card.due_at" class="btn ghost small" @click="changeDue('')">清除</button>
-            </dd>
-          </dl>
+              <span v-else class="row-static">已完成 <small>· 取消完成后回到原列</small></span>
+            </div>
 
-          <section class="sec">
-            <div class="sec-head">
-              <h3>描述</h3>
-              <div class="tabs" role="tablist">
-                <button role="tab" :aria-selected="descMode === 'edit'" @click="descMode = 'edit'">编辑</button>
-                <button role="tab" :aria-selected="descMode === 'preview'" @click="showPreview">预览</button>
+            <div class="row" title="截止日期">
+              <Icon name="calendar" class="row-icon" />
+              <div class="chips">
+                <template v-if="card.due_at === null">
+                  <button class="chip" @click="setDue(0)"><Icon name="today" :size="14" />今天</button>
+                  <button class="chip" @click="setDue(1)"><Icon name="tomorrow" :size="14" />明天</button>
+                </template>
+                <label class="chip" :class="{ set: card.due_at !== null, overdue: isOverdue(card.due_at, card.done_at) }">
+                  <Icon name="calendar" :size="14" />{{ card.due_at === null ? '其他时间' : `${dateLabel(card.due_at)} 截止` }}
+                  <input
+                    class="date-pick"
+                    type="date"
+                    aria-label="截止日期"
+                    :value="toDateInput(card.due_at)"
+                    @click="showPicker"
+                    @change="changeDue(($event.target as HTMLInputElement).value)"
+                  />
+                </label>
+                <button v-if="card.due_at !== null" class="icon-btn small" aria-label="清除截止日期" title="清除截止日期" @click="changeDue('')">
+                  <Icon name="close" :size="14" />
+                </button>
               </div>
             </div>
-            <MdInput v-if="descMode === 'edit'" v-model="desc" :rows="5" placeholder="写点什么……支持 Markdown，可以直接粘贴截图" />
-            <div v-else-if="desc.trim()" class="md desc-preview" title="点击编辑" @click="onPreviewClick" v-html="renderMd(desc)" />
-            <button v-else class="desc-empty" @click="descMode = 'edit'">添加描述…</button>
-          </section>
 
-          <section class="sec">
-            <div class="sec-head">
-              <h3>子任务</h3>
-              <span v-if="subtasks.length" class="mono sec-count">{{ card.sub_done }}/{{ card.sub_total }}</span>
+            <div class="row" title="优先级">
+              <Icon name="flag" class="row-icon" />
+              <select class="pill-select" :class="`p${card.priority}`" aria-label="优先级" :value="card.priority" @change="changePriority(($event.target as HTMLSelectElement).value)">
+                <option v-for="(p, i) in PRIORITIES" :key="i" :value="i">{{ i ? p : '无优先级' }}</option>
+              </select>
             </div>
-            <div v-if="subtasks.length" class="progress"><i :style="{ width: `${(card.sub_done / card.sub_total) * 100}%` }" /></div>
-            <ul class="subs">
-              <li v-for="s in subtasks" :key="s.id" :class="{ done: s.done }">
-                <button class="tick" :aria-pressed="!!s.done" :aria-label="s.done ? '标记未完成' : '标记完成'" @click="toggleSub(s)">
-                  <Icon name="check" :size="11" />
-                </button>
-                <input class="sub-title" :value="s.title" maxlength="200" aria-label="子任务标题" @change="renameSub(s, $event)" @keydown.enter="($event.target as HTMLElement).blur()" />
-                <button class="icon-btn sub-del" aria-label="删除子任务" @click="removeSub(s)"><Icon name="close" :size="14" /></button>
-              </li>
-            </ul>
-            <form @submit.prevent="addSub">
-              <input v-model="subDraft" class="field sub-add" maxlength="200" placeholder="+ 添加子任务，回车确认" />
-            </form>
-          </section>
+
+            <div class="row top" title="描述">
+              <Icon name="desc" class="row-icon" />
+              <div class="row-main">
+                <MdInput v-if="descMode === 'edit'" ref="descInput" v-model="desc" :rows="4" placeholder="添加描述……支持 Markdown，可以直接粘贴截图">
+                  <button class="btn small" @click="showPreview">完成</button>
+                </MdInput>
+                <div v-else-if="desc.trim()" class="md desc-preview" title="点击编辑" @click="onPreviewClick" v-html="renderMd(desc)" />
+                <button v-else class="row-placeholder" @click="editDesc">添加描述</button>
+              </div>
+            </div>
+
+            <div class="row top" title="子任务">
+              <Icon name="subtasks" class="row-icon" />
+              <div class="row-main">
+                <div v-if="subtasks.length" class="sub-head">
+                  <span>子任务</span>
+                  <span class="mono">{{ card.sub_done }}/{{ card.sub_total }}</span>
+                  <div class="progress"><i :style="{ width: `${(card.sub_done / card.sub_total) * 100}%` }" /></div>
+                </div>
+                <ul class="subs">
+                  <li v-for="s in subtasks" :key="s.id" :class="{ done: s.done }">
+                    <button class="tick" :aria-pressed="!!s.done" :aria-label="s.done ? '标记未完成' : '标记完成'" @click="toggleSub(s)">
+                      <Icon name="check" :size="11" />
+                    </button>
+                    <input class="sub-title" :value="s.title" maxlength="200" aria-label="子任务标题" @change="renameSub(s, $event)" @keydown.enter="($event.target as HTMLElement).blur()" />
+                    <button class="icon-btn sub-del" aria-label="删除子任务" @click="removeSub(s)"><Icon name="close" :size="14" /></button>
+                  </li>
+                </ul>
+                <AddInput placeholder="添加子任务" :maxlength="200" @add="addSub" />
+              </div>
+            </div>
+          </div>
 
           <section class="sec">
-            <div class="sec-head"><h3>动态</h3></div>
+            <h3 class="sec-title">动态</h3>
             <ol ref="timelineEl" class="timeline">
               <li v-for="c in timeline" :key="c.id" :class="c.kind">
                 <template v-if="c.kind === 'system'">
                   <span class="tl-dot" />
                   <span class="tl-text">{{ c.body_md }}</span>
-                  <time class="mono">{{ timeLabel(c.created_at) }}</time>
+                  <time>{{ timeLabel(c.created_at) }}</time>
                 </template>
                 <template v-else>
                   <div class="bubble md" v-html="renderMd(c.body_md)" />
                   <div class="bubble-meta">
-                    <time class="mono">{{ timeLabel(c.created_at) }}</time>
+                    <time>{{ timeLabel(c.created_at) }}</time>
                     <button class="link-btn" @click="removeComment(c)">删除</button>
                   </div>
                 </template>
@@ -294,13 +347,14 @@ async function removeComment(c: Entry) {
             </ol>
           </section>
         </div>
-        <p v-else class="drawer-loading mono">载入中…</p>
+        <p v-else class="drawer-loading">载入中…</p>
 
         <footer v-if="loadedId" class="composer">
-          <MdInput v-model="comment" :rows="1" placeholder="写评论…" @submit="send">
+          <MdInput v-model="comment" :rows="1" placeholder="输入评论" @submit="send">
             <button class="btn primary small" title="⌘/Ctrl + Enter" :disabled="!comment.trim() || sending" @click="send"><Icon name="send" :size="13" />发送</button>
           </MdInput>
         </footer>
+        <ImageViewer ref="viewer" />
       </aside>
     </div>
   </Transition>

@@ -2,6 +2,7 @@
 import { nextTick, ref } from 'vue';
 import { today } from '../format';
 import { login } from '../store';
+import Icon from './Icon.vue';
 
 const USERS = ['zhuhu', 'lvcui'];
 const picked = ref<string | null>(null);
@@ -52,8 +53,8 @@ async function submit() {
         @click="pick(u)"
         @submit.prevent="submit"
       >
-        <span class="user-seal" aria-hidden="true">{{ u[0].toUpperCase() }}</span>
-        <span class="user-name">{{ u }} <span class="user-lock">🔐</span></span>
+        <span class="avatar big" aria-hidden="true">{{ u[0].toUpperCase() }}</span>
+        <span class="user-name">{{ u }} <Icon name="lock" :size="15" class="user-lock" /></span>
         <div v-if="picked === u" class="user-login">
           <!-- 给密码管理器 / iCloud 钥匙串关联用户名 -->
           <input class="sr-only" type="text" name="username" autocomplete="username" :value="u" readonly tabindex="-1" />

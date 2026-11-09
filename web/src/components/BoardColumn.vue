@@ -3,6 +3,7 @@ import type Sortable from 'sortablejs';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { sortable } from '../sortable';
 import { addTask, byColumn, type Column, deleteColumn, moveTask, renameColumn } from '../store';
+import AddInput from './AddInput.vue';
 import Icon from './Icon.vue';
 import TaskCard from './TaskCard.vue';
 
@@ -59,19 +60,8 @@ function remove() {
   if (confirm(`删除列「${props.col.name}」？`)) deleteColumn(props.col.id);
 }
 
-// ---- 添加任务 ----
-const adding = ref(false);
-const title = ref('');
-const titleInput = ref<HTMLInputElement>();
-async function startAdd() {
-  adding.value = true;
-  await nextTick();
-  titleInput.value?.focus();
-}
-async function submitTask() {
-  const t = title.value.trim();
-  if (!t) return (adding.value = false);
-  title.value = '';
+// ---- 添加任务：新卡片排在列尾，滚过去让它可见 ----
+async function submitTask(t: string) {
   await addTask(props.col.id, t);
   await nextTick();
   listEl.value?.lastElementChild?.scrollIntoView({ block: 'nearest' });
@@ -112,18 +102,7 @@ async function submitTask() {
     </div>
 
     <footer v-if="!isDone" class="col-foot">
-      <form v-if="adding" @submit.prevent="submitTask">
-        <input
-          ref="titleInput"
-          v-model="title"
-          class="field"
-          maxlength="200"
-          placeholder="任务标题，回车添加"
-          @keydown.esc="adding = false"
-          @blur="!title.trim() && (adding = false)"
-        />
-      </form>
-      <button v-else class="add-task" @click="startAdd"><Icon name="plus" :size="14" />添加任务</button>
+      <AddInput placeholder="新建任务" :maxlength="200" @add="submitTask" />
     </footer>
     <p v-else-if="!tasks.length" class="col-hint">点任务的 ○ 或「完成任务」放到这里</p>
   </section>
