@@ -21,6 +21,8 @@ export const timeLabel = (ms: number) => {
 
 /** 截止日当天不算过期，过了那一天才标红 */
 export const isOverdue = (due: number | null, done: number | null) => due !== null && done === null && dayStart(due) < dayStart(Date.now());
+/** 今天截止且未完成：卡片标琥珀色，顶栏统计 */
+export const isDueToday = (due: number | null, done: number | null) => due !== null && done === null && dayStart(due) === dayStart(Date.now());
 
 /** <input type="date"> 的值和本地零点毫秒互转 */
 export function toDateInput(ms: number | null) {

@@ -80,7 +80,7 @@ async function submitTask(t: string) {
 </script>
 
 <template>
-  <section class="col" :class="`col-${col.kind}`" :data-col="col.id" :aria-label="col.name">
+  <section class="col" :class="[`col-${col.kind}`, { empty: !tasks.length }]" :data-col="col.id" :aria-label="col.name">
     <header class="col-head">
       <input
         v-if="renaming"
@@ -94,6 +94,7 @@ async function submitTask(t: string) {
       />
       <h2 v-else class="col-name">{{ col.name }}</h2>
       <span class="col-count mono">{{ tasks.length }}</span>
+      <span class="spacer" />
       <span v-if="locked" class="col-lock" title="锁定列：不能改名、排序或删除"><Icon name="lock" :size="13" /></span>
       <div v-else ref="menuEl" class="menu">
         <button class="icon-btn" aria-label="列操作" :aria-expanded="menuOpen" @click="toggleMenu()">
@@ -116,9 +117,9 @@ async function submitTask(t: string) {
       <AddInput placeholder="新建任务" :maxlength="200" :add="submitTask" />
     </footer>
 
-    <div ref="listEl" class="cards" :data-col="col.id">
-      <TaskCard v-for="t in tasks" :key="t.id" :task="t" />
+    <!-- 空列由 CSS 画成虚线框并显示 data-empty 的文字，不往列表里塞非卡片节点（Sortable 只认 .card） -->
+    <div ref="listEl" class="cards" :data-col="col.id" :data-empty="isDone ? '完成的任务会收在这里' : '还没有任务'">
+      <TaskCard v-for="(t, i) in tasks" :key="t.id" :task="t" :index="i" />
     </div>
-    <p v-if="isDone && !tasks.length" class="col-hint">点任务的 ○ 或「完成任务」放到这里</p>
   </section>
 </template>

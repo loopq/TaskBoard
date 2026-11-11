@@ -23,6 +23,7 @@ const PATHS = {
   rotateLeft: 'M3 4v6h6M3.5 15a8.5 8.5 0 1 0 2-8.8L3 10',
   rotateRight: 'M21 4v6h-6M20.5 15a8.5 8.5 0 1 1-2-8.8L21 10',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
 } as const;
 defineProps<{ name: keyof typeof PATHS; size?: number }>();
 </script>

@@ -58,7 +58,8 @@ function cancel() {
         @keydown.enter="onEnter"
         @keydown.esc="cancel"
       />
-      <button type="submit" class="btn primary small" :disabled="!text.trim() || pending">{{ pending ? '添加中…' : '添加' }}</button>
+      <!-- 有字才露出按钮；空着时一行灰字就够了。display:none 的提交按钮不影响回车隐式提交 -->
+      <button v-show="text.trim() || pending" type="submit" class="btn primary small" :disabled="!text.trim() || pending">{{ pending ? '添加中…' : '添加' }}</button>
     </form>
     <p v-if="error" :id="errorId" class="add-error" role="alert">{{ error }}</p>
   </div>
