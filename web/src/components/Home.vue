@@ -39,12 +39,12 @@ async function submit() {
   <main class="home">
     <div class="home-inner">
       <header class="home-head">
+        <h1 class="home-brand"><img class="mark" src="/favicon.svg" alt="" width="32" height="32" /><span class="wordmark">两人看板</span></h1>
+        <p class="home-title">两个人，各一本。</p>
         <p class="mono home-date">{{ today() }}</p>
-        <h1 class="wordmark home-mark">taskboard</h1>
-        <p class="home-sub">两个人，各一本。</p>
       </header>
 
-      <!-- 两条「书脊」：点开当前这条在原地展开密码框 -->
+      <!-- 两个人各一行（首字母方块是图标里的金 / 朱砂）：点开当前这行在原地展开密码框 -->
       <div class="users">
         <form
           v-for="(u, i) in USERS"

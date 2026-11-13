@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { isDueToday, isOverdue, today } from '../format';
 import { sortable } from '../sortable';
 import { addColumn, byColumn, columns, findTask, logout, moveColumn, state } from '../store';
+import { THEME_LABEL, cycleTheme, themePref } from '../theme';
 import AddInput from './AddInput.vue';
 import BoardColumn from './BoardColumn.vue';
 import Icon from './Icon.vue';
@@ -74,7 +75,8 @@ onBeforeUnmount(() => colSortable?.destroy());
   <div class="shell">
     <header class="topbar">
       <div class="brand">
-        <span class="wordmark">taskboard</span>
+        <img class="mark" src="/favicon.svg" alt="" width="24" height="24" />
+        <span class="wordmark">两人看板</span>
         <span class="mono topbar-date">{{ today() }}</span>
         <span v-if="overdueN || todayN" class="stats">
           <span v-if="overdueN" class="stat red"><Icon name="clock" :size="12" />过期 <b class="mono">{{ overdueN }}</b></span>
@@ -82,6 +84,9 @@ onBeforeUnmount(() => colSortable?.destroy());
         </span>
       </div>
       <div class="me">
+        <button class="icon-btn" :aria-label="`主题：${THEME_LABEL[themePref]}`" :title="`主题：${THEME_LABEL[themePref]}（点击切换）`" @click="cycleTheme">
+          <Icon :name="themePref" :size="17" />
+        </button>
         <span class="avatar mono" aria-hidden="true">{{ state.user?.[0]?.toUpperCase() }}</span>
         <span class="me-name">{{ state.user }}</span>
         <button class="icon-btn" aria-label="退出" title="退出" @click="logout"><Icon name="logout" :size="16" /></button>

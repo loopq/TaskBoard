@@ -1,8 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#f3eee4"/>
-  <g transform="rotate(-7 256 256)">
-    <rect x="121" y="121" width="270" height="270" rx="34" fill="#c23a22"/>
-    <rect x="139" y="139" width="234" height="234" rx="20" fill="none" stroke="#f3eee4" stroke-width="6" opacity=".85"/>
-    <text x="256" y="262" text-anchor="middle" dominant-baseline="central" font-family="Songti SC, STSong, serif" font-weight="900" font-size="172" fill="#f3eee4">完</text>
-  </g>
+  <!-- 「两」= 一（看板标题栏）+ 冂（看板外框）+ 两个人（金 / 朱砂）。唯一源文件：PNG 图标都由它 rsvg-convert 生成 -->
+  <rect width="512" height="512" fill="#0e0f13"/>
+  <rect x="116" y="110" width="280" height="32" rx="16" fill="#ece9e2"/>
+  <path d="M140 398V190a18 18 0 0 1 18-18h196a18 18 0 0 1 18 18v208" fill="none" stroke="#ece9e2" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="212" cy="234" r="27" fill="#d4a857"/>
+  <path d="M178 360l34-66 34 66" fill="none" stroke="#d4a857" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="300" cy="234" r="27" fill="#d2402a"/>
+  <path d="M266 360l34-66 34 66" fill="none" stroke="#d2402a" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

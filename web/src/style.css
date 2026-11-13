@@ -1,44 +1,75 @@
 /* ============================================================
-   taskboard · 纸、墨、印
-   暖白画布 → 略深的列面板 → 纯白卡片，三层分明；文字和按钮是墨黑；
-   朱砂红只盖在四处：完成 ✓、过期、非常紧急、危险操作。
-   中文走系统字体（国内无法稳定加载 webfont）；wordmark 用系统衬线；数字等宽。
+   两人看板 · 版式与「账号图谱」同族，朱砂保留
+   底色、卡片、边框、控件取账号图谱（AccountRelation web/index.html）的 token；
+   金色是交互强调：主按钮、焦点、选中。
+   朱砂只盖在：完成 ✓、过期、非常紧急、危险操作、错误。
+   亮 / 暗两组 token 由 <html data-theme> 切换：public/theme.js 首帧前设定，src/theme.ts 负责之后的切换。
+   组件只读 token，不写死颜色（图片预览固定黑底除外）。
+   中文走系统字体（国内无法稳定加载 webfont）；数字等宽。
    ============================================================ */
 
 :root {
-  --canvas: #f4f3ef;
-  --panel: #ebeae5;
+  --canvas: #f4f4f0;
+  --panel: #eeeee8;
   --surface: #fff;
-  --line: #e2e0da;
-  --line-soft: #edebe6;
-  --fill-hover: rgba(27, 27, 26, 0.05);
-  --fill-press: rgba(27, 27, 26, 0.09);
-  --ink: #1b1b1a;
-  --ink-2: #5e5d59;
-  --ink-3: #91908a;
-  --ink-4: #bcbab3;
+  --field: #fcfcfa;
+  --line: #e1e1d9;
+  --line-strong: #c9c9bf;
+  --line-soft: #ebebe4;
+  --fill-hover: rgba(27, 29, 34, 0.05);
+  --ink: #1b1d22;
+  --ink-2: #4a4f5b;
+  --ink-3: #696e7a;
+  --ink-4: #b4b7bf;
+  --accent: #b07d2e;
+  --accent-ink: #1a1507;
+  --accent-soft: rgba(176, 125, 46, 0.13);
   --red: #d2402a;
-  --red-soft: #fbe9e5;
-  --amber: #b86a00;
-  --link: #2457c5;
-  --p1: var(--ink-4);
-  --p2: var(--ink-2);
+  --on-red: #fff;
+  --amber: #b05506;
+  --link: #3d7196;
+  /* 优先级色阶：较低灰 → 普通蓝 → 紧急琥珀 → 非常紧急朱砂 */
+  --p1: var(--ink-3);
+  --p2: var(--link);
   --p3: var(--amber);
   --p4: var(--red);
   --sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --serif: ui-serif, 'New York', 'Iowan Old Style', Georgia, 'Songti SC', serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --shadow-card: 0 1px 2px rgba(27, 27, 26, 0.06), 0 1px 1px rgba(27, 27, 26, 0.03);
-  --shadow-lift: 0 10px 24px -8px rgba(27, 27, 26, 0.16), 0 2px 4px rgba(27, 27, 26, 0.05);
-  --shadow-pop: 0 16px 40px -12px rgba(27, 27, 26, 0.22), 0 2px 6px rgba(27, 27, 26, 0.06);
-  --ring: 0 0 0 3px rgba(27, 27, 26, 0.1);
-  --r-card: 10px;
-  --r-panel: 14px;
-  --r-ctl: 8px;
+  --shadow-card: 0 1px 2px rgba(30, 30, 20, 0.07);
+  --shadow-lift: 0 12px 32px -12px rgba(30, 30, 20, 0.22);
+  --shadow-pop: 0 16px 40px -12px rgba(30, 30, 20, 0.26), 0 2px 6px rgba(30, 30, 20, 0.06);
+  --scrim: rgba(27, 29, 34, 0.32);
+  --ring: 0 0 0 3px var(--accent-soft);
+  --r-card: 11px;
+  --r-panel: 16px;
+  --r-ctl: 7px;
   --col-w: 288px;
-  --gap: 14px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   color-scheme: light;
+}
+[data-theme='dark'] {
+  --canvas: #0e0f13;
+  --panel: #1f232c;
+  --surface: #171a21;
+  --field: #0f1116;
+  --line: #272b36;
+  --line-strong: #3a3f4d;
+  --line-soft: #1f232c;
+  --fill-hover: rgba(233, 231, 225, 0.06);
+  --ink: #e9e7e1;
+  --ink-2: #b6b9c3;
+  --ink-3: #7f8493;
+  --ink-4: #4b505d;
+  --accent: #d4a857;
+  --accent-soft: rgba(212, 168, 87, 0.14);
+  --red: #e2604a;
+  --amber: #e0913a;
+  --link: #6a9cbd;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
 }
 
 *,
@@ -82,7 +113,7 @@ button {
   cursor: pointer;
 }
 :focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 .mono {
@@ -101,13 +132,16 @@ button {
   flex: 1;
 }
 .wordmark {
-  font-family: var(--serif);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
-.wordmark::after {
-  content: '.';
-  color: var(--red);
+/* 品牌 mark 就是 favicon.svg 本身：深色方底，圆角让它像个小图标 */
+.mark {
+  flex: none;
+  display: block;
+  border-radius: 6px;
 }
 
 /* ---------- 动效：只定义一次，各处复用 ---------- */
@@ -154,7 +188,7 @@ button {
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-ctl);
-  background: var(--surface);
+  background: var(--panel);
   color: var(--ink);
   font-size: 13.5px;
   font-weight: 500;
@@ -162,9 +196,11 @@ button {
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .btn.primary {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
 }
 .btn.ghost {
   border-color: transparent;
@@ -204,13 +240,16 @@ button {
   padding: 0 11px;
   border: 1px solid var(--line);
   border-radius: var(--r-ctl);
-  background: var(--surface);
+  background: var(--field);
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+.field::placeholder {
+  color: var(--ink-3);
+}
 .field:focus {
-  border-color: var(--ink);
+  border-color: var(--accent);
   box-shadow: var(--ring);
 }
 .p1 {
@@ -252,7 +291,7 @@ button {
 .tick[aria-pressed='true'] {
   border-color: var(--red);
   background: var(--red);
-  color: #fff;
+  color: var(--on-red);
 }
 .tick.stamping {
   animation: stamp 0.45s var(--ease);
@@ -264,19 +303,19 @@ button {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 600;
 }
 @media (hover: hover) {
   .btn:hover:not(:disabled) {
-    border-color: var(--ink-4);
-    background: var(--canvas);
+    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--panel), var(--ink) 6%);
   }
   .btn.primary:hover:not(:disabled) {
-    border-color: #343432;
-    background: #343432;
+    border-color: transparent;
+    background: color-mix(in srgb, var(--accent), #fff 9%);
   }
   .btn.ghost:hover:not(:disabled),
   .icon-btn:hover {
@@ -289,7 +328,7 @@ button {
     color: var(--ink-4);
   }
   .tick[aria-pressed='true']:hover {
-    color: #fff;
+    color: var(--on-red);
     opacity: 0.85;
   }
 }
@@ -321,8 +360,8 @@ button {
   color: var(--ink-3);
 }
 .add-input:focus-within {
-  border-color: var(--ink);
-  background: var(--surface);
+  border-color: var(--accent);
+  background: var(--field);
   box-shadow: var(--ring);
   color: var(--ink);
 }
@@ -345,99 +384,106 @@ button {
   }
 }
 
-/* ---------- 首页：封面 + 两条书脊 ---------- */
+/* ---------- 首页：账号图谱式登录门，居中一张卡；背景两团光晕 = 图标里的两个人（金 / 朱砂） ---------- */
 .home {
   min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(40px, env(safe-area-inset-top)) 24px max(48px, env(safe-area-inset-bottom));
-  background: var(--canvas);
+  padding: max(40px, env(safe-area-inset-top)) 20px max(48px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(640px 420px at 18% 8%, var(--accent-soft), transparent 65%),
+    radial-gradient(520px 420px at 88% 92%, color-mix(in srgb, var(--red), transparent 88%), transparent 65%),
+    var(--canvas);
 }
 .home-inner {
-  width: min(100%, 420px);
-  display: flex;
-  flex-direction: column;
-  gap: 36px;
+  width: min(100%, 400px);
+  padding: 28px 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+  animation: rise 0.5s var(--ease) backwards;
 }
-.home-head {
-  animation: rise 0.6s var(--ease) backwards;
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+  color: var(--ink-2);
+}
+.home-brand .wordmark {
+  font-size: 14px;
+  font-weight: 600;
+}
+.home-title {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 650;
 }
 .home-date {
-  margin: 0;
+  margin: 0 0 18px;
   color: var(--ink-3);
   font-size: 12px;
-  letter-spacing: 0.16em;
-}
-.home-mark {
-  margin: 10px 0;
-  font-size: clamp(48px, 10vw, 72px);
-  line-height: 0.95;
-  letter-spacing: -0.03em;
-}
-.home-sub {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: 15px;
+  letter-spacing: 0.08em;
 }
 .users {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .user-row {
   display: block;
   width: 100%;
   margin: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  border-radius: var(--r-card);
+  background: var(--field);
   cursor: pointer;
   text-align: left;
-  animation: rise 0.6s var(--ease) backwards;
-  animation-delay: calc(160ms + var(--i) * 80ms);
-  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+  animation: rise 0.5s var(--ease) backwards;
+  animation-delay: calc(120ms + var(--i) * 70ms);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 .user-row.open {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink), var(--shadow-lift);
+  border-color: var(--accent);
+  background: var(--accent-soft);
   cursor: default;
 }
 .user-line {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
+/* 首字母方块：第一个人金、第二个人朱砂，和图标里的两个人对上 */
 .user-initial {
+  --uc: var(--accent);
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--ink);
-  color: #fff;
-  font-size: 17px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--uc);
+  color: var(--surface);
+  font-size: 16px;
   font-weight: 600;
-  transition: background 0.2s;
 }
-.user-row.open .user-initial {
-  background: var(--red);
+.user-row + .user-row .user-initial {
+  --uc: var(--red);
 }
 .user-name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .user-lock {
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 .user-login {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-  padding-left: 54px;
+  margin-top: 10px;
+  padding-left: 48px;
   animation: rise 0.3s var(--ease);
 }
 .user-login .field,
@@ -445,19 +491,17 @@ button {
   height: 38px;
 }
 .user-err {
-  margin: 8px 0 0 54px;
+  margin: 8px 0 0 48px;
   color: var(--red);
   font-size: 13px;
 }
 @media (hover: hover) {
   .user-row:not(.open):hover {
-    border-color: var(--ink-4);
-    box-shadow: var(--shadow-lift);
-    transform: translateY(-1px);
+    border-color: var(--line-strong);
   }
 }
 
-/* ---------- 看板 ---------- */
+/* ---------- 看板：顶栏 + 通高列，列之间一根发丝线（账号图谱的分栏） ---------- */
 .shell {
   display: flex;
   flex-direction: column;
@@ -470,19 +514,17 @@ button {
   align-items: center;
   gap: 16px;
   min-height: 56px;
-  padding: max(10px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 10px max(24px, env(safe-area-inset-left));
+  padding: max(10px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 10px max(18px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--line);
 }
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
-.brand .wordmark {
-  font-size: 22px;
-  line-height: 1;
-}
 .topbar-date {
+  margin-left: 4px;
   color: var(--ink-3);
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -519,13 +561,11 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
-  gap: var(--gap);
-  padding: 6px max(24px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: var(--ink-4) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 .board-loading {
   margin: auto;
@@ -536,30 +576,26 @@ button {
 }
 .normals {
   flex: none;
-  align-self: stretch;
   display: flex;
-  align-items: flex-start;
-  gap: var(--gap);
 }
-/* 列是画布上的一块面板，高度贴着内容；卡片列表在面板内部滚动 */
+/* 列是一条通高的栏，右边一根发丝线；卡片列表贴着内容高度，超出在栏内滚动 */
 .col {
   flex: 0 0 var(--col-w);
   width: var(--col-w);
   min-width: 0;
   display: flex;
   flex-direction: column;
-  max-height: 100%;
-  padding: 6px;
-  border-radius: var(--r-panel);
-  background: var(--panel);
+  border-right: 1px solid var(--line);
 }
 .col-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 2px 2px 6px 8px;
+  min-height: 45px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
 }
 .col-normal .col-head {
   cursor: grab;
@@ -568,9 +604,8 @@ button {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -581,11 +616,12 @@ button {
 .col-count {
   flex: none;
   min-width: 22px;
-  padding: 0 6px;
+  padding: 0 7px;
   border-radius: 999px;
-  background: rgba(27, 27, 26, 0.07);
-  color: var(--ink-2);
+  background: var(--panel);
+  color: var(--ink-3);
   font-size: 11px;
+  font-weight: 600;
   line-height: 18px;
   text-align: center;
 }
@@ -605,45 +641,47 @@ button {
   transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 .cards {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 40px;
-  padding: 2px;
+  padding: 12px 12px 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--ink-4) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 /* 空列：虚线框 + 一句话，仍然是拖放目标 */
 .col.empty .cards {
   align-items: center;
   justify-content: center;
   min-height: 96px;
+  margin: 12px 12px 0;
   border: 1.5px dashed var(--line);
   border-radius: var(--r-card);
 }
 .col.empty .cards::after {
   content: attr(data-empty);
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-size: 12.5px;
   letter-spacing: 0.02em;
 }
 .col-foot {
   flex: none;
   order: 1;
-  padding: 6px 2px 2px;
+  padding: 6px 10px 12px;
 }
 /* 幽灵列：只是一个入口，不需要整列的宽度 */
 .col-add {
   flex-basis: 220px;
   width: 220px;
-  border: 1.5px dashed var(--line);
-  background: transparent;
+  padding: 10px;
+  border-right: 0;
 }
 .col-add .add-input {
   min-height: 38px;
+  border: 1.5px dashed var(--line);
 }
 .col-ghost {
   opacity: 0.4;
@@ -693,14 +731,14 @@ button {
   }
 }
 
-/* ---------- 卡片：标题 + 底栏，两段固定 ---------- */
+/* ---------- 卡片：标题 + 底栏，两段固定；左侧色条 = 优先级（账号图谱的分类色条） ---------- */
 .card {
   position: relative;
   flex: none;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 11px 12px 9px;
+  padding: 12px 14px 11px 15px;
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background: var(--surface);
@@ -713,6 +751,17 @@ button {
   animation: card-in 0.4s var(--ease) backwards;
   animation-delay: calc(var(--i, 0) * 28ms);
   transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s, opacity 0.18s;
+}
+/* 「无」优先级没有 --pc，色条透明 */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -1px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--pc, transparent);
 }
 .card .tick {
   margin-top: 2px;
@@ -732,8 +781,8 @@ button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 10px;
-  margin-top: 7px;
+  gap: 4px 8px;
+  margin-top: 8px;
   color: var(--ink-3);
   font-size: 12px;
   line-height: 18px;
@@ -744,16 +793,26 @@ button {
   gap: 4px;
   white-space: nowrap;
 }
+/* 截止 / 优先级是染色 chip（账号图谱的 .chip）：过期朱砂、今天琥珀、优先级各自的颜色 */
+.card-foot .due,
 .card-foot .flag {
-  color: var(--pc);
+  --cc: var(--ink-3);
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--cc), transparent 55%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cc), transparent 88%);
+  color: var(--cc);
+  font-size: 11px;
+  font-weight: 500;
+}
+.card-foot .flag {
+  --cc: var(--pc);
 }
 .card-foot .due.today {
-  color: var(--amber);
-  font-weight: 500;
+  --cc: var(--amber);
 }
 .card-foot .due.overdue {
-  color: var(--red);
-  font-weight: 500;
+  --cc: var(--red);
 }
 .card-foot .alldone {
   color: var(--ink-2);
@@ -772,16 +831,17 @@ button {
   text-decoration-color: var(--ink-4);
 }
 .card.active {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink), var(--shadow-lift);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-lift);
 }
 .card-ghost {
-  border: 1.5px dashed var(--ink-4);
+  border: 1.5px dashed var(--line-strong);
   background: var(--fill-hover);
   box-shadow: none;
   animation: none;
 }
-.card-ghost > * {
+.card-ghost > *,
+.card-ghost::before {
   visibility: hidden;
 }
 .card-drag {
@@ -789,7 +849,7 @@ button {
 }
 @media (hover: hover) {
   .card:not(.active):hover {
-    border-color: var(--ink-4);
+    border-color: var(--line-strong);
     box-shadow: var(--shadow-lift);
     transform: translateY(-1px);
   }
@@ -805,17 +865,18 @@ button {
   z-index: 50;
   display: flex;
   justify-content: flex-end;
-  background: rgba(27, 27, 26, 0.28);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 .drawer {
   display: flex;
   flex-direction: column;
   width: min(600px, 100vw);
   height: 100%;
+  border-left: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: -24px 0 60px -20px rgba(27, 27, 26, 0.3);
+  box-shadow: var(--shadow-pop);
   outline: none;
 }
 .drawer-top {
@@ -825,7 +886,7 @@ button {
   gap: 2px;
   min-height: 52px;
   padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px 18px;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line);
 }
 .task-no {
   gap: 5px;
@@ -913,7 +974,8 @@ button {
 }
 .props dt {
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .props dd {
   display: flex;
@@ -935,7 +997,7 @@ button {
   padding: 0 26px 0 8px;
   border: 0;
   border-radius: var(--r-ctl);
-  background: transparent url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2391908a' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>") no-repeat right 8px center;
+  background: transparent url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237f8493' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>") no-repeat right 8px center;
   color: var(--ink);
   font-size: 14px;
   font-weight: 500;
@@ -966,20 +1028,22 @@ button {
   padding: 0 11px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--field);
   color: var(--ink-2);
   font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .chip.set {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 500;
 }
 .chip.set.overdue {
   border-color: var(--red);
-  background: var(--red);
+  background: color-mix(in srgb, var(--red), transparent 88%);
+  color: var(--red);
 }
 /* 原生日期选择器盖在「其他时间」上：iOS 点上去直接弹系统滚轮，桌面由 showPicker 弹日历 */
 .date-pick {
@@ -1018,17 +1082,17 @@ button {
 .sec {
   margin-top: 22px;
   padding-top: 18px;
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line);
 }
 .sec-title {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 8px;
-  color: var(--ink-2);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
 }
 .sec-n {
   color: var(--ink-3);
@@ -1046,7 +1110,7 @@ button {
 .progress i {
   display: block;
   height: 100%;
-  background: var(--ink);
+  background: var(--accent);
   transition: width 0.3s var(--ease);
 }
 .progress.full i {
@@ -1164,7 +1228,7 @@ button {
 .composer {
   flex: none;
   padding: 10px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line);
   background: var(--surface);
 }
 .composer .md-text {
@@ -1178,16 +1242,16 @@ button {
     background-color: var(--fill-hover);
   }
   .chip:hover {
-    border-color: var(--ink-4);
-    background: var(--canvas);
+    border-color: var(--line-strong);
+    background: var(--panel);
   }
   .chip.set:hover {
-    border-color: #343432;
-    background: #343432;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent), transparent 78%);
   }
   .chip.set.overdue:hover {
-    border-color: #b9361f;
-    background: #b9361f;
+    border-color: var(--red);
+    background: color-mix(in srgb, var(--red), transparent 80%);
   }
   .link-btn:hover {
     color: var(--red);
@@ -1198,11 +1262,11 @@ button {
 .md-input {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--field);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .md-input:focus-within {
-  border-color: var(--ink);
+  border-color: var(--accent);
   box-shadow: var(--ring);
 }
 .md-text {
@@ -1295,7 +1359,7 @@ button {
 .md code {
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(27, 27, 26, 0.06);
+  background: var(--fill-hover);
   font-family: var(--mono);
   font-size: 0.88em;
 }
@@ -1303,7 +1367,7 @@ button {
   padding: 12px 14px;
   overflow-x: auto;
   border-radius: 8px;
-  background: rgba(27, 27, 26, 0.05);
+  background: var(--fill-hover);
 }
 .md pre code {
   padding: 0;
@@ -1479,10 +1543,11 @@ button {
   z-index: 100;
   max-width: calc(100vw - 32px);
   padding: 9px 16px;
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--ink);
-  color: #fff;
+  color: var(--canvas);
   font-size: 13.5px;
+  font-weight: 500;
   box-shadow: var(--shadow-pop);
   translate: -50% 0;
 }
@@ -1530,22 +1595,17 @@ button {
     min-height: 52px;
     padding-inline: max(16px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
   }
-  .brand {
-    gap: 10px;
-  }
-  .brand .wordmark {
-    font-size: 20px;
-  }
   .topbar-date,
   .me-name {
     display: none;
   }
-  /* 分组 chips：一行横滑，当前项墨底白字；末尾「+」新建分组 */
+  /* 分组条（账号图谱的 tabbar）：一行横滑，当前项凸起成一张小卡；末尾「+」新建分组 */
   .mobile-nav {
     flex: none;
     display: flex;
-    gap: 6px;
-    padding: 4px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+    gap: 4px;
+    padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line);
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -1559,35 +1619,39 @@ button {
     gap: 6px;
     height: 40px;
     padding: 0 14px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: var(--r-card);
+    background: transparent;
     color: var(--ink-2);
     font-size: 14px;
     font-weight: 500;
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
   }
   .tab[aria-selected='true'] {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: #fff;
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: var(--shadow-card);
   }
   .tab-n {
+    color: var(--ink-3);
     font-size: 12px;
-    opacity: 0.6;
+    font-weight: 500;
   }
   .tab-add {
     width: 40px;
     padding: 0;
     justify-content: center;
+    border-color: var(--line);
     border-style: dashed;
     color: var(--ink-3);
   }
   .add-input {
     min-height: 44px;
     border-color: var(--line);
-    background: var(--surface);
+    background: var(--field);
   }
   .add-input input {
     min-height: 42px;
@@ -1601,7 +1665,7 @@ button {
   /* 手机只显示当前分组；保留组件实例，切组不会丢掉未提交的草稿。 */
   .board {
     display: block;
-    padding: 0 max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     overflow: hidden;
   }
   .normals {
@@ -1613,8 +1677,7 @@ button {
     height: 100%;
     min-height: 0;
     padding: 0;
-    border-radius: 0;
-    background: transparent;
+    border-right: 0;
   }
   /* 「新建任务」输入和 ··· 菜单并成一行，列名 / 数量已经在 chips 上，不再重复 */
   .col.mobile-current,
@@ -1633,6 +1696,7 @@ button {
     grid-area: 1 / 2 / 2 / 3;
     min-height: 0;
     padding: 0 0 10px;
+    border-bottom: 0;
     cursor: default;
   }
   .col-name,
@@ -1655,12 +1719,18 @@ button {
   }
   .col.empty .cards {
     min-height: 140px;
+    margin: 0;
   }
   .col-add {
-    border: 0;
+    padding: 0;
+  }
+  /* 手机上输入框有边框，桌面那套「负边距对齐文字」会让它比内容宽出一截 */
+  .sec .add-input {
+    margin: 2px 0 0;
   }
   .drawer {
     width: 100vw;
+    border-left: 0;
   }
   .drawer-top {
     padding-left: max(12px, env(safe-area-inset-left));
