@@ -8,6 +8,7 @@ const PATHS = {
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   subtasks: 'M3 6l2 2 3-3M3 14l2 2 3-3M11 6.5h10M11 14.5h10M11 20h10',
   comment: 'M4 5h16v11H9l-4 4v-4H4z',
+  bell: 'M6 9a6 6 0 0 1 12 0c0 6 2 6 2 8H4c0-2 2-2 2-8M10 20a2 2 0 0 0 4 0',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5h.01',
   lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',

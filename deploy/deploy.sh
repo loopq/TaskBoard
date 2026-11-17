@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 source deploy/ssh.sh
 [[ $(node -p 'process.versions.node.split(".")[0]') == 24 ]] || { echo '请用 Node 24 运行本机门禁' >&2; exit 1; }
 (cd api && npm run check)
+(cd api && npm run test:push)
 bash api/test/rules.sh
 (cd web && npm run build)
 release=$(python3 deploy/package-release.py)

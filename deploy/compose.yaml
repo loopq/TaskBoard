@@ -18,6 +18,7 @@ services:
     networks:
       private:
         aliases: [taskboard-app]
+      egress: {}
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: "3"}
@@ -25,3 +26,5 @@ networks:
   private:
     name: taskboard-private
     external: true
+  egress:
+    name: taskboard-egress

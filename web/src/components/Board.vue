@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type Sortable from 'sortablejs';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { api } from '../api';
 import { isDueToday, isOverdue, today } from '../format';
+import { disablePush, enablePush, pushStatus } from '../push';
 import { sortable } from '../sortable';
-import { addColumn, byColumn, columns, findTask, logout, moveColumn, state } from '../store';
+import { addColumn, byColumn, columns, findTask, logout, moveColumn, state, toast } from '../store';
 import { THEME_LABEL, cycleTheme, themePref } from '../theme';
 import AddInput from './AddInput.vue';
 import BoardColumn from './BoardColumn.vue';
@@ -19,6 +21,8 @@ const todayN = computed(() => state.tasks.filter((t) => isDueToday(t.due_at, t.d
 
 const selectedId = ref('');
 const addingColumn = ref(false);
+const pushOpen = ref(false);
+const pushWrap = ref<HTMLElement>();
 const mobileQuery = window.matchMedia('(max-width: 640px)');
 const mobile = ref(mobileQuery.matches);
 const onViewport = () => (mobile.value = mobileQuery.matches);
@@ -50,6 +54,44 @@ async function submitColumn(name: string) {
   addingColumn.value = false;
   return true;
 }
+
+const PUSH_LABEL = {
+  on: '每日提醒已开启',
+  off: '开启每日提醒',
+  denied: '每日提醒被系统关闭',
+  unsupported: '当前浏览器不支持每日提醒',
+} as const;
+const pushLabel = computed(() => PUSH_LABEL[pushStatus.state]);
+
+// 开启成功顺手推一条测试当确认；失败原因留在面板里显示
+async function onEnable() {
+  await enablePush();
+  if (pushStatus.state !== 'on') return;
+  const r = await api<{ sent: number }>('POST', '/push/test').catch(() => ({ sent: 0 }));
+  toast(r.sent ? '已开启每日提醒，已推送一条测试' : '已开启每日提醒（测试推送没发出去）');
+}
+
+async function onDisable() {
+  await disablePush();
+  if (pushStatus.error) return toast(pushStatus.error);
+  pushOpen.value = false;
+  toast('已关闭每日提醒');
+}
+
+// 「已开启」只是告知，3 秒后自己收起；其他状态有按钮或说明要看，只在点外面时关
+let pushTimer: ReturnType<typeof setTimeout> | undefined;
+watch([pushOpen, () => pushStatus.state], ([open, s]) => {
+  clearTimeout(pushTimer);
+  if (open && s === 'on') pushTimer = setTimeout(() => (pushOpen.value = false), 3000);
+});
+const onDocDown = (e: PointerEvent) => {
+  if (pushOpen.value && !pushWrap.value?.contains(e.target as Node)) pushOpen.value = false;
+};
+document.addEventListener('pointerdown', onDocDown);
+onBeforeUnmount(() => {
+  clearTimeout(pushTimer);
+  document.removeEventListener('pointerdown', onDocDown);
+});
 
 // 只有普通列放进可排序容器，「待处理」「已完成」在容器外，天然拖不动、也插不到它们外侧
 const normalsEl = ref<HTMLElement>();
@@ -84,6 +126,30 @@ onBeforeUnmount(() => colSortable?.destroy());
         </span>
       </div>
       <div class="me">
+        <div ref="pushWrap" class="push-wrap">
+          <button class="icon-btn" :aria-label="pushLabel" :title="pushLabel" :aria-expanded="pushOpen" @click="pushOpen = !pushOpen">
+            <Icon name="bell" :size="17" />
+          </button>
+          <div v-if="pushOpen" class="push-panel" role="dialog" aria-label="每日提醒">
+            <p v-if="pushStatus.state === 'unsupported'" class="push-note">在 Safari 里点「分享 → 添加到主屏幕」，再从主屏幕打开才能开启提醒</p>
+            <template v-else-if="pushStatus.state === 'denied'">
+              <p class="push-note">通知已被关闭，请到 iPhone 设置 → 两人看板 → 通知 里打开</p>
+            </template>
+            <template v-else-if="pushStatus.state === 'on'">
+              <p class="push-note">已开启 · 每天 10:30 推送今天到期的任务</p>
+              <div class="push-actions">
+                <button class="btn small ghost" :disabled="pushStatus.busy" @click="onDisable">关闭</button>
+              </div>
+            </template>
+            <template v-else>
+              <p class="push-note">每天 10:30，把今天到期的任务推到这台设备。</p>
+              <p v-if="pushStatus.error" class="push-err" role="alert">{{ pushStatus.error }}</p>
+              <button class="btn small primary" :disabled="pushStatus.busy" @click="onEnable">
+                {{ pushStatus.busy ? '开启中…' : '开启每日提醒（10:30）' }}
+              </button>
+            </template>
+          </div>
+        </div>
         <button class="icon-btn" :aria-label="`主题：${THEME_LABEL[themePref]}`" :title="`主题：${THEME_LABEL[themePref]}（点击切换）`" @click="cycleTheme">
           <Icon :name="themePref" :size="17" />
         </button>

@@ -20,7 +20,7 @@ if [[ -z ${BASE:-} ]]; then
   BASE="http://127.0.0.1:$PORT"
   DATA="$TMP/data"
   [[ -d ../web/dist ]] && export WEB_DIST=../web/dist
-  DATA_DIR=$DATA PORT=$PORT HOST=127.0.0.1 node --disable-warning=ExperimentalWarning src/server.ts >"$TMP/server.log" 2>&1 &
+  DATA_DIR=$DATA PORT=$PORT HOST=127.0.0.1 PUSH_SCHEDULER=0 node --disable-warning=ExperimentalWarning src/server.ts >"$TMP/server.log" 2>&1 &
   SERVER=$!
   sql() { TB_DB="$DATA/taskboard.db" node --disable-warning=ExperimentalWarning -e "$SQL_JS" "$1"; }
 else
@@ -56,6 +56,7 @@ check() {
 }
 j() { jq -r "$1" <<<"$B"; }
 cred() { jq -nc --arg u "$1" --arg p "$2" '{user: $u, password: $p}'; }
+pushsub() { jq -nc --arg e "$1" --arg p "$2" --arg a "$3" '{endpoint: $e, keys: {p256dh: $p, auth: $a}}'; }
 b64u() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 # forge 用户 过期时间 → 用 .dev.vars 里的 TOKEN_SECRET 自签 token
 forge() {
@@ -80,6 +81,39 @@ req GET /board '' "$(forge zhuhu 1000)"; check '过期 token → 401' 401
 req GET /board '' "$(forge root $FAR)"; check '白名单外用户即使签名正确 → 401' 401
 req GET /board '' "$(forge zhuhu $FAR)"; check '自签合法 token → 200（签名格式与文档一致）' 200
 req GET /nope; check '未知接口 → 404' 404
+
+echo '== Web Push'
+req GET /push/key '' ''; check '未登录读 VAPID 公钥 → 401' 401
+req POST /push/subscribe '{}' ''; check '未登录订阅 → 401' 401
+req POST /push/test '' ''; check '未登录发测试 → 401' 401
+TOK=$A
+req GET /push/key; check '获取 VAPID 公钥（65 字节未压缩点 → 87 字符 base64url）' 200 '.publicKey | test("^[A-Za-z0-9_-]{87}$")'
+EP="https://web.push.apple.com/test-$RANDOM-$$"
+UA1=BF9xWXKlYveHBx-1tvJvp6PBq3Ou-ozKwhmgyLTd6LnwHDxOxURYKu0c3X-VZ6H8QaeJKd-vCXha9h3Ib1MrBpg
+AU1=jZp-RC2zr6otTiqwGFUjRw
+UA2=BFifHQsTd1iQ58gDBygceL-EfxDDirr_dNACMcx6OFvB2TezeXCTrvY9gpcbUhKnT6ryyvMLhg2MvEgYsCIf8nk
+AU2=FI1mVRuyp5z01rz2ljRRiA
+req POST /push/subscribe "$(pushsub 'https://evil.com/x' "$UA1" "$AU1")"; check '非白名单 endpoint → 400' 400
+req POST /push/subscribe "$(pushsub "$EP" "$UA1" 'AAAA')"; check 'auth 不是 16 字节 → 400' 400
+ZEROS=$(printf 'A%.0s' {1..87})
+req POST /push/subscribe "$(pushsub "$EP" "$ZEROS" "$AU1")"; check 'p256dh 首字节不是 0x04 → 400' 400
+req POST /push/subscribe "$(pushsub "$EP" "$UA1" "$AU1")"; check 'zhuhu 订阅成功' 200 '.ok == true'
+req POST /push/subscribe "$(pushsub "$EP" "$UA2" "$AU2")" "$BT"; check 'lvcui 用同一设备重新订阅' 200 '.ok == true'
+ROWS=$(sql "SELECT owner, p256dh, auth FROM push_subs WHERE endpoint = '$EP'")
+if [[ $(jq 'length' <<<"$ROWS") == 1 && $(jq -r '.[0].owner' <<<"$ROWS") == lvcui \
+  && $(jq -r '.[0].p256dh' <<<"$ROWS") == "$UA2" && $(jq -r '.[0].auth' <<<"$ROWS") == "$AU2" ]]; then
+  ok '同一 endpoint 换账号：只剩 B，owner 和 keys 都是 B 的'
+else ng '同一 endpoint 换账号' "$ROWS"; fi
+req POST /push/unsubscribe "{\"endpoint\":\"$EP\"}" ''; check '不带 Bearer 也能退订（endpoint 即凭据）' 200 '.ok == true'
+[[ $(sql "SELECT COUNT(*) AS n FROM push_subs WHERE endpoint = '$EP'" | jq -r '.[0].n') == 0 ]] \
+  && ok '公开退订删掉对应行' || ng '公开退订' '行还在'
+req POST /push/unsubscribe '{"endpoint":"https://evil.com/x"}' ''; check '退订非白名单 endpoint → 400' 400
+EP2="https://fcm.googleapis.com/fcm/send/keep-$RANDOM-$$"
+req POST /push/subscribe "$(pushsub "$EP2" "$UA1" "$AU1")"; check '再订阅一台设备（用于确认无副作用）' 200
+req POST /push/unsubscribe '{"endpoint":"https://web.push.apple.com/not-exist-123"}' ''; check '退订不存在的合法 endpoint 也返回 ok' 200
+[[ $(sql "SELECT COUNT(*) AS n FROM push_subs WHERE endpoint = '$EP2'" | jq -r '.[0].n') == 1 ]] \
+  && ok '随机退订不影响其他订阅' || ng '随机退订影响其他行' '目标行被删'
+req POST /push/unsubscribe "{\"endpoint\":\"$EP2\"}" ''
 
 echo '== 列 §5'
 TOK=$A

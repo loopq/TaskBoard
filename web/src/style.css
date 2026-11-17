@@ -557,6 +557,38 @@ button {
   font-size: 13.5px;
   font-weight: 500;
 }
+.push-wrap {
+  position: relative;
+}
+.push-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in 0.18s var(--ease);
+}
+.push-note {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.push-err {
+  margin: 0 0 8px;
+  color: var(--red);
+  font-size: 12.5px;
+}
+.push-actions {
+  display: flex;
+  gap: 8px;
+}
 .board {
   flex: 1;
   min-height: 0;
@@ -1591,13 +1623,37 @@ button {
 /* ---------- 手机 ---------- */
 @media (max-width: 640px) {
   .topbar {
-    gap: 10px;
+    gap: 8px;
     min-height: 52px;
     padding-inline: max(16px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
+  }
+  .brand {
+    gap: 8px;
+  }
+  .topbar .wordmark {
+    font-size: 14px;
   }
   .topbar-date,
   .me-name {
     display: none;
+  }
+  .stats {
+    gap: 6px;
+  }
+  .stat {
+    gap: 2px;
+  }
+  .me {
+    gap: 0;
+  }
+  .topbar .icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .push-panel {
+    position: fixed;
+    top: calc(52px + env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
   }
   /* 分组条（账号图谱的 tabbar）：一行横滑，当前项凸起成一张小卡；末尾「+」新建分组 */
   .mobile-nav {

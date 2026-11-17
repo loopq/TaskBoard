@@ -1,7 +1,8 @@
 import { authenticate, login, logout, syncFileCookie } from './auth.ts';
 import { createColumn, deleteColumn, patchColumn } from './columns.ts';
 import { getFile, upload } from './files.ts';
-import { type Ctx, type Env, HttpError, json } from './http.ts';
+import { type Ctx, type Env, HttpError, body, json } from './http.ts';
+import { type PushSub, dailyDigest, dayInShanghai, isPushEndpoint, parseSubscription, send, vapidKeys } from './push.ts';
 import * as t from './tasks.ts';
 
 type Handler = (c: Ctx, params: string[]) => Promise<Response>;
@@ -19,10 +20,51 @@ const health: Handler = async ({ env }) => {
   return json({ ok: true });
 };
 
+const pushKey: Handler = async ({ env }) => json({ publicKey: (await vapidKeys(env.DB)).publicKey });
+
+const pushSubscribe: Handler = async ({ req, env, uid }) => {
+  const sub = await parseSubscription(await body(req));
+  // endpoint 是设备唯一键：同一设备换账号时 owner / keys 一起覆盖
+  await env.DB
+    .prepare(
+      `INSERT INTO push_subs (endpoint, owner, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET
+         owner = excluded.owner, p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at`,
+    )
+    .bind(sub.endpoint, uid, sub.p256dh, sub.auth, Date.now())
+    .run();
+  return json({ ok: true });
+};
+
+const pushUnsubscribe: Handler = async ({ req, env }) => {
+  // endpoint 等同于退订凭据：推送服务下发、不可猜测；公开路由让退出登录后也能补做清理
+  const { endpoint } = await body(req);
+  if (typeof endpoint !== 'string' || !isPushEndpoint(endpoint)) throw new HttpError(400, '推送订阅不合法：endpoint');
+  await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint).run();
+  return json({ ok: true });
+};
+
+const pushTest: Handler = async ({ env, uid }) => {
+  const subs = await env.DB.prepare('SELECT endpoint, p256dh, auth FROM push_subs WHERE owner = ?').bind(uid).all<PushSub>();
+  const msg = (await dailyDigest(env.DB, uid, dayInShanghai(Date.now()))) ?? {
+    title: '今天没有到期任务',
+    body: '安心开始新的一天',
+    url: '/',
+    tag: 'daily',
+  };
+  let sent = 0;
+  for (const sub of subs.results) if ((await send(env.DB, sub, msg)) === 'ok') sent++;
+  return json({ sent });
+};
+
 const routes = [
   route('GET', '/health', health, true),
   route('POST', '/login', login, true),
   route('POST', '/logout', logout, true),
+  route('GET', '/push/key', pushKey),
+  route('POST', '/push/subscribe', pushSubscribe),
+  route('POST', '/push/unsubscribe', pushUnsubscribe, true),
+  route('POST', '/push/test', pushTest),
   route('GET', '/files/*', getFile, true), // 不走 Bearer 必选：getFile 自己认 Bearer 或图片 Cookie
   route('GET', '/board', t.board),
   route('POST', '/columns', createColumn),

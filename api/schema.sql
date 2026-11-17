@@ -26,6 +26,17 @@ CREATE TABLE IF NOT EXISTS comments (
   body_md TEXT NOT NULL, created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS login_fail (user TEXT PRIMARY KEY, count INTEGER, locked_until INTEGER);
+-- Web Push：endpoint 是设备唯一键；同一设备换账号时 owner / keys 整体覆盖
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint TEXT PRIMARY KEY,
+  owner TEXT NOT NULL,
+  p256dh TEXT NOT NULL, auth TEXT NOT NULL,   -- base64url
+  created_at INTEGER NOT NULL
+);
+-- 推送去重：key 形如 daily:zhuhu:2026-11-17；以后按任务提醒用 task:<id>:<remind_at>
+CREATE TABLE IF NOT EXISTS push_sent (key TEXT PRIMARY KEY, at INTEGER NOT NULL);
+-- 小型键值：目前只存 VAPID 密钥对（JWK）
+CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_tasks_owner_col ON tasks(owner, column_id, sort);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id, created_at);
 -- 设计文档外补充：看板统计子任务进度、级联删除都按 task_id 查 subtasks

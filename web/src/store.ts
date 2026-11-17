@@ -1,5 +1,6 @@
 import { computed, reactive, watch } from 'vue';
 import { api, session, setUnauthorizedHandler } from './api';
+import { cleanupPush, pushState, pushStatus, syncPush } from './push';
 
 export type Kind = 'todo' | 'normal' | 'done';
 export interface Column {
@@ -115,13 +116,18 @@ export async function login(user: string, password: string) {
   session.save(r.user, r.token);
   state.user = r.user;
   await load();
+  void syncPush();
 }
 
-export function logout() {
+export async function logout() {
+  // 先清推送订阅再断 session；离线失败也照常退出，pending 留给下次启动补做
+  await cleanupPush();
   session.clear();
   // 图片 Cookie 是 HttpOnly，前端删不掉，让服务端下发过期；失败也无妨，Cookie 里的 token 到期自然失效
   api('POST', '/logout').catch(() => {});
   Object.assign(state, { user: null, columns: [], tasks: [], loaded: false, openId: null });
+  pushStatus.state = pushState();
+  pushStatus.error = '';
 }
 
 setUnauthorizedHandler(() => {

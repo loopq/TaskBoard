@@ -11,7 +11,7 @@ import tarfile
 root = pathlib.Path(__file__).resolve().parents[1]
 names = {
     'Dockerfile', '.dockerignore', 'api/package.json', 'api/schema.sql',
-    'api/test/rules.sh', 'deploy/compose.yaml', 'deploy/package-release.py',
+    'api/test/rules.sh', 'api/test/push.test.ts', 'deploy/compose.yaml', 'deploy/package-release.py',
     'deploy/ssh.sh', 'deploy/deploy.sh', 'deploy/setup.sh',
     'deploy/server/taskboard-release', 'deploy/server/taskboard-setup',
     'deploy/server/taskboard-backup', 'deploy/server/taskboard-set-password',

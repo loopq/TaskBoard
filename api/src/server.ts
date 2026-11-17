@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Env } from './http.ts';
 import { handle } from './index.ts';
+import { startScheduler } from './push.ts';
 import { openDb } from './sqlite.ts';
 
 process.umask(0o077);
@@ -119,6 +120,8 @@ const server = createServer(async (req, res) => {
 });
 server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;
+
+startScheduler(db);
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? '127.0.0.1';

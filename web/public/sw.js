@@ -65,3 +65,33 @@ async function prune(cache, html) {
     if (p.startsWith('/assets/') && !keep.has(p)) cache.delete(req);
   }
 }
+
+// iOS 要求每条推送都必须弹出通知：JSON 解析失败也要弹兜底文案
+self.addEventListener('push', (e) => {
+  let data = {};
+  try {
+    data = e.data?.json() ?? {};
+  } catch {}
+  e.waitUntil(
+    self.registration.showNotification(data.title || '两人看板有新提醒', {
+      body: data.body || '',
+      tag: data.tag || 'taskboard',
+      data: { url: data.url || '/' },
+      icon: '/icon-192.png',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || '/';
+  e.waitUntil(
+    (async () => {
+      const wins = await self.clients.matchAll({ type: 'window' });
+      const win = wins[0];
+      if (!win) return self.clients.openWindow(url);
+      await win.focus();
+      if ('navigate' in win) await win.navigate(url).catch(() => {});
+    })(),
+  );
+});

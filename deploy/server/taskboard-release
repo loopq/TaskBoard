@@ -64,7 +64,7 @@ done >"$test_root/test.env"
 docker run -d --name "$test_container" --init --read-only --cap-drop ALL \
   --security-opt no-new-privileges --memory 256m --pids-limit 100 \
   --tmpfs /tmp:size=16m,mode=1777 --log-opt max-size=10m --log-opt max-file=3 \
-  --env-file "$test_root/test.env" \
+  --env-file "$test_root/test.env" -e PUSH_SCHEDULER=0 \
   -v "$test_root/data:/data" -p 127.0.0.1:18080:3000 "taskboard:$release" >/dev/null
 for attempt in {1..45}; do
   health=$(docker inspect "$test_container" --format '{{.State.Health.Status}}')
