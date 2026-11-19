@@ -37,7 +37,7 @@
 - `api/test/rules.sh`：「/files 不鉴权可读」改成一组新断言：未登录 401、本人 Bearer/Cookie 200、他人 404、篡改 Cookie 401、只带 Cookie 访问其他接口 401、Cookie 一致时不重复下发、logout 清 Cookie。
 - `web/src/store.ts`（logout 调用 `/logout`）、`web/src/components/ImageViewer.vue`（新增）、`TaskDrawer.vue`（事件委托、Esc）、`Icon.vue`（旋转、箭头、原图图标）、`style.css`。
 - `skills/taskboard/scripts/tb.mjs`、`SKILL.md`：新增 `image` 命令。
-- `docs/agents/private-task-board-design.md` §6：删掉「`/files` 公开」这条天花板，改写成新的鉴权说明。
+- `docs/plans/private-task-board-design.md` §6：删掉「`/files` 公开」这条天花板，改写成新的鉴权说明。
 
 ## 5. 验证与发布
 

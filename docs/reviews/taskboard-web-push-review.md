@@ -1,6 +1,6 @@
 # Plan Review: taskboard-web-push
 
-**Plan File**: /Users/loopq/dev/git/loopq/taskboard/docs/agents/taskboard-web-push.md
+**Plan File**: /Users/loopq/dev/git/loopq/taskboard/docs/plans/taskboard-web-push.md
 **Reviewer**: Codex
 
 ---

@@ -87,7 +87,7 @@ whoami
 - `web/src/store.ts`（`no` 字段、`?t=` 同步）、`TaskDrawer.vue`、`TaskCard.vue`、`BoardColumn.vue`、`Board.vue`、`Home.vue`、`Icon.vue`（新增 link 等图标）、`format.ts`（快捷日期）、`style.css`（主题重写）、`index.html`（theme-color）
 - 新增 `skills/taskboard/`
 - `deploy/server/taskboard-release`：解包后刷新 mtime（见 §9，发布时发现的流水线 bug）
-- `docs/agents/private-task-board-design.md` §4 / §6 / §7 同步更新编号、链接和 UI 描述
+- `docs/plans/private-task-board-design.md` §4 / §6 / §7 同步更新编号、链接和 UI 描述
 
 ## 8. 验证与发布
 

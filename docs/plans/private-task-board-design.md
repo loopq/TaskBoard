@@ -38,7 +38,7 @@ taskboard/
     src/
     public/manifest.webmanifest, icons, CNAME
   .github/workflows/pages.yml
-  docs/agents/
+  docs/plans/  docs/reviews/
 ```
 
 ### 依赖（尽量少）
