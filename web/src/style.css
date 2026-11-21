@@ -1768,9 +1768,11 @@ button {
     width: 44px;
     height: 44px;
   }
+  /* 列是 align-items: start，列表默认按内容撑高，会被 .board 裁掉；封顶到网格第二行才能在列表内滚动 */
   .cards {
     grid-area: 2 / 1 / 3 / 3;
     min-height: 0;
+    max-height: 100%;
     padding: 2px 0;
   }
   .col.empty .cards {
